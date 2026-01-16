@@ -231,15 +231,16 @@ class TestWalletLoadRequestStatus:
         assert response.status_code == 200
         data = response.json()
         
-        # Verify wallet_loads structure
-        assert 'wallet_loads' in data
+        # Verify pending structure
+        assert 'pending' in data
+        assert 'total' in data
         
-        # If there are wallet loads, verify status field exists
-        for wl in data.get('wallet_loads', []):
-            assert 'status' in wl
+        # If there are pending items, verify status field exists
+        for item in data.get('pending', []):
+            assert 'status' in item
             # Status should be one of the valid pending states
-            valid_pending = ['PENDING_REVIEW', 'pending_review', 'pending']
-            assert wl['status'] in valid_pending, f"Unexpected status: {wl['status']}"
+            valid_pending = ['PENDING_REVIEW', 'pending_review', 'pending', 'initiated', 'awaiting_payment_proof']
+            assert item['status'] in valid_pending, f"Unexpected status: {item['status']}"
         
         print(f"✓ Wallet load pending query works correctly")
 
