@@ -87,6 +87,7 @@ async def init_api_v1_db():
             ("manual_approval_only", "BOOLEAN DEFAULT FALSE"),
             ("no_bonus", "BOOLEAN DEFAULT FALSE"),
             ("visibility_level", "VARCHAR(20) DEFAULT 'full'"),
+            ("auto_game_load", "BOOLEAN DEFAULT false"),
         ]
         for col_name, col_def in user_columns:
             try:
