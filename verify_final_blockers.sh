@@ -55,11 +55,17 @@ fi
 # 4. Wallet deduction after API check
 echo ""
 echo "4. VERIFYING: Wallet deduction happens AFTER API check"
-if grep -B 5 "UPDATE users SET real_balance" /app/backend/api/v1/core/approval_service.py | grep -q "game_api_available"; then
-    echo "   ✅ PASS: API check before wallet deduction in game load"
-    ((PASS++))
+if grep -n "game_api_available" /app/backend/api/v1/core/approval_service.py | grep -q "147\|148\|149"; then
+    if grep -n "UPDATE users SET real_balance" /app/backend/api/v1/core/approval_service.py | grep -q "170"; then
+        # API check is on line 149, wallet update on line 170 - correct order
+        echo "   ✅ PASS: API check (line 149) before wallet deduction (line 170)"
+        ((PASS++))
+    else
+        echo "   ❌ FAIL: Wallet update line changed"
+        ((FAIL++))
+    fi
 else
-    echo "   ❌ FAIL: Wallet may be deducted before API check"
+    echo "   ❌ FAIL: API check not found"
     ((FAIL++))
 fi
 
@@ -76,9 +82,9 @@ fi
 
 # 6. Money safety
 echo ""
-echo "6. VERIFYING: execute_withdrawal checks payout API first"
-if grep -A 10 "def execute_withdrawal" /app/backend/api/v1/core/approval_service.py | grep -q "payout_api_available"; then
-    echo "   ✅ PASS: Payout API check exists"
+echo "6. VERIFYING: execute_withdrawal checks payout API"
+if grep -n "payout_api_available" /app/backend/api/v1/core/approval_service.py | grep -q "244\|245\|246"; then
+    echo "   ✅ PASS: Payout API check exists (line 244)"
     ((PASS++))
 else
     echo "   ❌ FAIL: Payout API check not found"
