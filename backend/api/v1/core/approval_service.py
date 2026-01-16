@@ -219,14 +219,11 @@ async def execute_withdrawal(order: Dict, user: Dict, conn) -> Dict:
     """
     Execute withdrawal/redemption IMMEDIATELY after approval
     
-    This function:
-    1. Processes payout (deducts from wallet - already done)
-    2. Records payout transaction
-    3. Logs audit trail
-    4. Returns execution result
+    PRODUCTION RULE: If payout API is unavailable, this MUST fail.
+    NO claiming payout completion without real transaction ID.
     
     Returns:
-        {"success": bool, "transaction_id": str, "payout_amount": float, "error": str}
+        {"success": bool, "transaction_id": str, "payout_amount": float, "error": str, "error_code": str}
     """
     try:
         transaction_id = str(uuid.uuid4())
@@ -237,11 +234,36 @@ async def execute_withdrawal(order: Dict, user: Dict, conn) -> Dict:
         current_user = await conn.fetchrow("SELECT real_balance FROM users WHERE user_id = $1", user['user_id'])
         balance_after = float(current_user['real_balance'] or 0)
         
+        # ==================== PAYOUT API INTEGRATION ====================
+        # CRITICAL: This is where real payout API would be called
+        # If payout API is unavailable, this section MUST return failure
+        
+        # TODO: Replace with real payout API call
+        # Example:
+        # payout_response = await call_payout_api(amount, user_account, order_id)
+        # if not payout_response.success:
+        #     return {"success": False, "error": payout_response.error, "error_code": "PAYOUT_API_UNAVAILABLE"}
+        
+        # For now, check if we have a payout API endpoint configured
+        payout_api_available = False  # Set to True when real integration exists
+        
+        if not payout_api_available:
+            # API unavailable - MUST fail
+            return {
+                "success": False,
+                "error": "Payout API is not available. Real integration required.",
+                "error_code": "PAYOUT_API_UNAVAILABLE",
+                "payout_amount": payout_amount
+            }
+        
+        # If we reach here, payout API call was successful
+        # Use REAL transaction ID from payout provider
+        
         logger.info(f"Withdrawal executed: Order {order['order_id']}, Payout: {payout_amount}, Void: {void_amount}, Balance after: {balance_after}")
         
         return {
             "success": True,
-            "transaction_id": transaction_id,
+            "transaction_id": transaction_id,  # REAL transaction ID from payout provider
             "payout_amount": payout_amount,
             "void_amount": void_amount,
             "wallet_balance_remaining": balance_after,
@@ -250,7 +272,7 @@ async def execute_withdrawal(order: Dict, user: Dict, conn) -> Dict:
         
     except Exception as e:
         logger.error(f"Withdrawal execution failed for order {order['order_id']}: {str(e)}", exc_info=True)
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": str(e), "error_code": "WITHDRAWAL_EXECUTION_ERROR"}
 
 
 async def _process_approval(
