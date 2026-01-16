@@ -273,6 +273,9 @@ async def _process_approval(
             )
             
             # Apply side effects based on order type
+            execution_result = None
+            executed_at = None
+            
             if order_type in ['wallet_topup', 'deposit']:
                 # Credit wallet
                 current_balance = float(user.get('real_balance', 0) or 0)
@@ -298,14 +301,49 @@ async def _process_approval(
                    current_balance, new_balance, order_id,
                    f"Wallet top-up via {order.get('payment_method', 'N/A')}")
                 
+                execution_result = {
+                    "success": True,
+                    "wallet_credited": amount,
+                    "wallet_balance": new_balance,
+                    "executed_at": now.isoformat()
+                }
+                executed_at = now
+                
             elif order_type == 'game_load':
-                # Game load - trigger game load, NO wallet credit
-                # The game load happens separately via game_routes
-                # Just mark as approved here
-                pass
+                # IMMEDIATE EXECUTION: Load game right now
+                logger.info(f"Executing game load for order {order_id}")
+                execution_result = await execute_game_load(order, user, conn)
+                executed_at = now
+                
+                if not execution_result.get('success'):
+                    # Execution failed - mark order as execution_failed
+                    await conn.execute("""
+                        UPDATE orders SET 
+                            status = 'execution_failed',
+                            execution_result = $1,
+                            executed_at = $2
+                        WHERE order_id = $3
+                    """, json.dumps(execution_result), executed_at, order_id)
+                    
+                    logger.error(f"Game load execution failed for order {order_id}: {execution_result.get('error')}")
+                    
+                    # Emit failure event
+                    await emit_event(
+                        event_type=EventType.GAME_LOAD_FAILED,
+                        title="Game Load Failed",
+                        message=f"Game load execution failed for order {order_id[:8]}...\n\nError: {execution_result.get('error')}\nUser: {user.get('display_name', user['username'])}",
+                        reference_id=order_id,
+                        reference_type="order",
+                        user_id=user['user_id'],
+                        username=user.get('username'),
+                        display_name=user.get('display_name'),
+                        requires_action=True
+                    )
+                    
+                    return ApprovalResult(False, "Approval succeeded but execution failed", execution_result)
                 
             elif order_type == 'withdrawal':
-                # Withdrawal - deduct from wallet and mark payout
+                # Withdrawal - deduct from wallet FIRST
                 current_balance = float(user.get('real_balance', 0) or 0)
                 new_balance = current_balance - amount
                 
@@ -329,6 +367,32 @@ async def _process_approval(
                 """, str(uuid.uuid4()), user['user_id'], amount,
                    current_balance, new_balance, order_id,
                    f"Withdrawal to {order.get('payment_method', 'N/A')}")
+                
+                # IMMEDIATE EXECUTION: Execute withdrawal
+                logger.info(f"Executing withdrawal for order {order_id}")
+                execution_result = await execute_withdrawal(order, user, conn)
+                executed_at = now
+                
+                if not execution_result.get('success'):
+                    # Rollback not possible here, but mark as failed
+                    await conn.execute("""
+                        UPDATE orders SET 
+                            status = 'execution_failed',
+                            execution_result = $1,
+                            executed_at = $2
+                        WHERE order_id = $3
+                    """, json.dumps(execution_result), executed_at, order_id)
+                    
+                    return ApprovalResult(False, "Withdrawal execution failed", execution_result)
+            
+            # Update order with execution results
+            if executed_at:
+                await conn.execute("""
+                    UPDATE orders SET 
+                        executed_at = $1,
+                        execution_result = $2
+                    WHERE order_id = $3
+                """, executed_at, json.dumps(execution_result) if execution_result else None, order_id)
     
     # Emit approval event
     event_type = EventType.ORDER_APPROVED
