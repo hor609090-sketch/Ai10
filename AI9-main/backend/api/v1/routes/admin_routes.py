@@ -564,47 +564,9 @@ async def delete_rule(
     return {"success": True, "message": "Rule deleted"}
 
 
-# ==================== TELEGRAM CONFIG (DEPRECATED - Use /api/v1/admin/telegram/bots) ====================
-
-@router.get("/telegram", summary="[DEPRECATED] Get Telegram configuration")
-async def get_telegram_config(
-    request: Request,
-    authorization: str = Header(..., alias="Authorization")
-):
-    """
-    DEPRECATED: Use /api/v1/admin/telegram/bots for multi-bot management.
-    
-    This endpoint returns info about the new multi-bot system.
-    """
-    auth = await require_admin(request, authorization)
-    
-    # Return info about new system
-    bots = await fetch_all("SELECT bot_id, name, is_active FROM telegram_bots LIMIT 5")
-    
-    return {
-        "configured": len(bots) > 0,
-        "message": "DEPRECATED: Use /api/v1/admin/telegram/bots for multi-bot management",
-        "bots_count": len(bots),
-        "bots": [{"bot_id": b['bot_id'], "name": b['name'], "is_active": b['is_active']} for b in bots],
-        "new_endpoint": "/api/v1/admin/telegram/bots"
-    }
-
-
-@router.put("/telegram", summary="[DEPRECATED] Update Telegram configuration")
-async def update_telegram_config(
-    request: Request,
-    authorization: str = Header(..., alias="Authorization")
-):
-    """
-    DEPRECATED: Use /api/v1/admin/telegram/bots for multi-bot management.
-    """
-    await require_admin(request, authorization)
-    
-    return {
-        "success": False,
-        "message": "DEPRECATED: Use /api/v1/admin/telegram/bots for multi-bot management",
-        "new_endpoint": "/api/v1/admin/telegram/bots"
-    }
+# ==================== LEGACY TELEGRAM CONFIG DELETED ====================
+# These endpoints have been REMOVED per system requirements.
+# Use /api/v1/admin/telegram/bots for multi-bot management ONLY.
 
 
 # ==================== SYSTEM SETTINGS ====================
