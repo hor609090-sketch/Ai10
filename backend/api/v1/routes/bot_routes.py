@@ -480,7 +480,7 @@ async def create_order_bot(
             status, idempotency_key, metadata, created_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
     ''',
-        order_id, data.user_id, user['username'], 'game_load',
+        order_id, data.user_id, user['username'], 'deposit',
         data.game_name.lower(), validation['game']['display_name'],
         data.amount, validation['bonus_calculation']['total_bonus'], validation['total_amount'],
         data.referral_code.upper() if data.referral_code else None,
@@ -539,33 +539,28 @@ async def upload_payment_proof_bot(
     
     now = datetime.now(timezone.utc)
     
-    # Calculate proof hash for deduplication
-    import hashlib
-    proof_hash = hashlib.sha256(data.image_url.encode()).hexdigest()[:32] if data.image_url else None
-    
     # Update metadata with conversation ID if provided
     metadata = json.loads(order['metadata']) if order.get('metadata') else {}
     if data.conversation_id:
         metadata['chatwoot_conversation_id'] = data.conversation_id
     metadata['proof_uploaded_by'] = 'bot'
     metadata['proof_uploaded_at'] = now.isoformat()
-    metadata['proof_hash'] = proof_hash
-    metadata['proof_source'] = 'bot'
     
-    # Update order - NO proof URL stored, only metadata
+    # Update order - CANONICAL STATUS: PENDING_REVIEW
     await execute('''
         UPDATE orders 
-        SET payment_proof_uploaded_at = $1,
+        SET payment_proof_url = $1, 
+            payment_proof_uploaded_at = $2,
             status = 'PENDING_REVIEW',
-            metadata = $2,
+            metadata = $3,
             updated_at = NOW()
-        WHERE order_id = $3
-    ''', now, json.dumps(metadata), order_id)
+        WHERE order_id = $4
+    ''', data.image_url, now, json.dumps(metadata), order_id)
     
-    # Log audit (NO image URL stored)
+    # Log audit
     await log_audit(
         order['user_id'], order['username'], "bot.payment_proof_uploaded", "order", order_id,
-        {"proof_hash": proof_hash, "proof_source": "bot", "conversation_id": data.conversation_id}
+        {"image_url": data.image_url[:100], "conversation_id": data.conversation_id}
     )
     
     # Trigger Telegram notification via NotificationRouter (multi-bot system)
@@ -582,12 +577,10 @@ async def upload_payment_proof_bot(
             username=order['username'],
             display_name=order.get('display_name'),
             amount=order['amount'],
-            image_url=data.image_url,  # Send to Telegram via image_url field (redacted before DB)
             extra_data={
                 "order_type": order.get('order_type', 'deposit'),
                 "game_name": order.get('game_name'),
-                "proof_source": "bot",
-                "proof_hash": proof_hash
+                "image_url": data.image_url  # Forward to Telegram
             },
             requires_action=True,
             entity_type="order"
@@ -599,11 +592,10 @@ async def upload_payment_proof_bot(
     
     return {
         "success": True,
-        "message": "Payment proof uploaded successfully - sent to Telegram, NOT stored in DB",
+        "message": "Payment proof uploaded successfully",
         "order_id": order_id,
-        "status": "PENDING_REVIEW",
-        "telegram_notified": telegram_notified,
-        "proof_hash": proof_hash
+        "status": "pending_review",
+        "telegram_notified": telegram_notified
     }
 
 

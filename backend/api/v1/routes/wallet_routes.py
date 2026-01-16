@@ -171,11 +171,11 @@ async def create_wallet_load_request(
     except Exception:
         proof_hash = None
     
-    # Check for duplicate proof
+    # Check for duplicate proof - exclude rejected requests (both legacy and canonical statuses)
     if proof_hash:
         duplicate = await fetch_one("""
             SELECT request_id FROM wallet_load_requests 
-            WHERE proof_image_hash = $1 AND status != 'rejected'
+            WHERE proof_image_hash = $1 AND status NOT IN ('rejected', 'REJECTED')
         """, proof_hash)
         if duplicate:
             raise HTTPException(
@@ -184,9 +184,10 @@ async def create_wallet_load_request(
             )
     
     # Check for pending requests limit (max 3 pending per user)
+    # Check both legacy 'pending' and canonical 'PENDING_REVIEW' statuses
     pending_count = await fetch_one("""
         SELECT COUNT(*) as count FROM wallet_load_requests 
-        WHERE user_id = $1 AND status = 'pending'
+        WHERE user_id = $1 AND status IN ('pending', 'PENDING_REVIEW', 'pending_review')
     """, user['user_id'])
     
     if pending_count and pending_count['count'] >= 3:
@@ -205,11 +206,12 @@ async def create_wallet_load_request(
     
     # NO PROOF URL STORED - image forwarded to Telegram only
     # Store only hash for duplicate detection
+    # CANONICAL STATUS: PENDING_REVIEW (awaiting admin approval)
     await execute("""
         INSERT INTO wallet_load_requests 
         (request_id, user_id, amount, payment_method, qr_id, 
          proof_image_hash, status, ip_address, device_fingerprint, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, NOW())
+        VALUES ($1, $2, $3, $4, $5, $6, 'PENDING_REVIEW', $7, $8, NOW())
     """, request_id, user['user_id'], data.amount, data.payment_method, 
        qr['qr_id'], proof_hash, client_ip, device_fp)
     
@@ -346,10 +348,11 @@ async def get_wallet_balance(
     user = await get_wallet_user(request, x_portal_token, client_token)
     
     # Get pending loads
+    # Get pending loads - check both legacy and canonical statuses
     pending = await fetch_one("""
         SELECT COALESCE(SUM(amount), 0) as pending_amount
         FROM wallet_load_requests 
-        WHERE user_id = $1 AND status = 'pending'
+        WHERE user_id = $1 AND status IN ('pending', 'PENDING_REVIEW', 'pending_review')
     """, user['user_id'])
     
     return {

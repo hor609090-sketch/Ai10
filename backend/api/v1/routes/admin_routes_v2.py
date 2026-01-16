@@ -118,20 +118,20 @@ async def get_dashboard(request: Request, authorization: str = Header(...)):
         FROM orders
     """)
     
-    # Today's flow
+    # Today's flow - handle both legacy 'approved' and canonical 'APPROVED_EXECUTED' statuses
     today_flow = await fetch_one("""
         SELECT 
-            COALESCE(SUM(amount) FILTER (WHERE order_type = 'deposit' AND status = 'APPROVED_EXECUTED' AND approved_at >= $1), 0) as deposits_in,
-            COALESCE(SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status = 'APPROVED_EXECUTED' AND approved_at >= $1), 0) as withdrawals_out,
-            COALESCE(SUM(void_amount) FILTER (WHERE status = 'APPROVED_EXECUTED' AND approved_at >= $1), 0) as voided_today
+            COALESCE(SUM(amount) FILTER (WHERE order_type = 'deposit' AND status IN ('approved', 'APPROVED_EXECUTED') AND approved_at >= $1), 0) as deposits_in,
+            COALESCE(SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status IN ('approved', 'APPROVED_EXECUTED') AND approved_at >= $1), 0) as withdrawals_out,
+            COALESCE(SUM(void_amount) FILTER (WHERE status IN ('approved', 'APPROVED_EXECUTED') AND approved_at >= $1), 0) as voided_today
         FROM orders
     """, today_start)
     
-    # Total profit calculation
+    # Total profit calculation - handle both legacy and canonical statuses
     profit = await fetch_one("""
         SELECT 
-            COALESCE(SUM(amount) FILTER (WHERE order_type = 'deposit' AND status = 'APPROVED_EXECUTED'), 0) -
-            COALESCE(SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status = 'APPROVED_EXECUTED'), 0) as net_profit
+            COALESCE(SUM(amount) FILTER (WHERE order_type = 'deposit' AND status IN ('approved', 'APPROVED_EXECUTED')), 0) -
+            COALESCE(SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status IN ('approved', 'APPROVED_EXECUTED')), 0) as net_profit
         FROM orders
     """)
     
@@ -584,8 +584,8 @@ async def get_client_detail(
     
     # Build response matching frontend expectations
     # Calculate financial summary
-    deposits_in = sum(float(o.get('amount', 0)) for o in orders if o.get('order_type') == 'deposit' and o.get('status') == 'APPROVED_EXECUTED')
-    withdrawals_out = sum(float(o.get('payout_amount', 0) or 0) for o in orders if o.get('order_type') == 'withdrawal' and o.get('status') == 'APPROVED_EXECUTED')
+    deposits_in = sum(float(o.get('amount', 0)) for o in orders if o.get('order_type') == 'deposit' and o.get('status') == 'approved')
+    withdrawals_out = sum(float(o.get('payout_amount', 0) or 0) for o in orders if o.get('order_type') == 'withdrawal' and o.get('status') == 'approved')
     
     return {
         "client": {
@@ -953,14 +953,14 @@ async def list_games(request: Request, authorization: str = Header(...)):
     
     result = []
     for g in games:
-        # Get analytics
+        # Get analytics - handle both legacy 'approved' and canonical 'APPROVED_EXECUTED' statuses
         analytics = await fetch_one("""
             SELECT 
-                COALESCE(SUM(amount) FILTER (WHERE order_type = 'deposit' AND status = 'APPROVED_EXECUTED'), 0) as total_in,
-                COALESCE(SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status = 'APPROVED_EXECUTED'), 0) as total_out,
-                COALESCE(SUM(bonus_amount) FILTER (WHERE status = 'APPROVED_EXECUTED'), 0) as total_bonus,
-                COALESCE(SUM(play_credits_added) FILTER (WHERE status = 'APPROVED_EXECUTED'), 0) as total_play_credits,
-                COALESCE(SUM(void_amount) FILTER (WHERE status = 'APPROVED_EXECUTED'), 0) as total_void
+                COALESCE(SUM(amount) FILTER (WHERE order_type = 'deposit' AND status IN ('approved', 'APPROVED_EXECUTED')), 0) as total_in,
+                COALESCE(SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status IN ('approved', 'APPROVED_EXECUTED')), 0) as total_out,
+                COALESCE(SUM(bonus_amount) FILTER (WHERE status IN ('approved', 'APPROVED_EXECUTED')), 0) as total_bonus,
+                COALESCE(SUM(play_credits_added) FILTER (WHERE status IN ('approved', 'APPROVED_EXECUTED')), 0) as total_play_credits,
+                COALESCE(SUM(void_amount) FILTER (WHERE status IN ('approved', 'APPROVED_EXECUTED')), 0) as total_void
             FROM orders WHERE game_name = $1
         """, g['game_name'])
         
@@ -1338,13 +1338,14 @@ async def get_balance_flow_report(
     
     since = datetime.now(timezone.utc) - timedelta(days=days)
     
+    # Handle both legacy 'approved' and canonical 'APPROVED_EXECUTED' statuses
     flow = await fetch_one("""
         SELECT 
-            COALESCE(SUM(amount) FILTER (WHERE order_type = 'deposit' AND status = 'APPROVED_EXECUTED'), 0) as total_deposits,
-            COALESCE(SUM(bonus_amount) FILTER (WHERE status = 'APPROVED_EXECUTED'), 0) as total_bonus,
-            COALESCE(SUM(play_credits_added) FILTER (WHERE status = 'APPROVED_EXECUTED'), 0) as total_play_credits,
-            COALESCE(SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status = 'APPROVED_EXECUTED'), 0) as total_payouts,
-            COALESCE(SUM(void_amount) FILTER (WHERE status = 'APPROVED_EXECUTED'), 0) as total_voided
+            COALESCE(SUM(amount) FILTER (WHERE order_type = 'deposit' AND status IN ('approved', 'APPROVED_EXECUTED')), 0) as total_deposits,
+            COALESCE(SUM(bonus_amount) FILTER (WHERE status IN ('approved', 'APPROVED_EXECUTED')), 0) as total_bonus,
+            COALESCE(SUM(play_credits_added) FILTER (WHERE status IN ('approved', 'APPROVED_EXECUTED')), 0) as total_play_credits,
+            COALESCE(SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status IN ('approved', 'APPROVED_EXECUTED')), 0) as total_payouts,
+            COALESCE(SUM(void_amount) FILTER (WHERE status IN ('approved', 'APPROVED_EXECUTED')), 0) as total_voided
         FROM orders WHERE created_at >= $1
     """, since)
     
@@ -1366,17 +1367,18 @@ async def get_profit_by_game(request: Request, authorization: str = Header(...))
     """Profit breakdown by game"""
     auth = await require_admin(request, authorization)
     
+    # Handle both legacy 'approved' and canonical 'APPROVED_EXECUTED' statuses
     games = await fetch_all("""
         SELECT 
             game_name,
-            COALESCE(SUM(amount) FILTER (WHERE order_type = 'deposit' AND status = 'APPROVED_EXECUTED'), 0) as deposits,
-            COALESCE(SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status = 'APPROVED_EXECUTED'), 0) as payouts,
-            COALESCE(SUM(bonus_amount) FILTER (WHERE status = 'APPROVED_EXECUTED'), 0) as bonus,
-            COALESCE(SUM(void_amount) FILTER (WHERE status = 'APPROVED_EXECUTED'), 0) as voided
+            COALESCE(SUM(amount) FILTER (WHERE order_type = 'deposit' AND status IN ('approved', 'APPROVED_EXECUTED')), 0) as deposits,
+            COALESCE(SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status IN ('approved', 'APPROVED_EXECUTED')), 0) as payouts,
+            COALESCE(SUM(bonus_amount) FILTER (WHERE status IN ('approved', 'APPROVED_EXECUTED')), 0) as bonus,
+            COALESCE(SUM(void_amount) FILTER (WHERE status IN ('approved', 'APPROVED_EXECUTED')), 0) as voided
         FROM orders
         GROUP BY game_name
-        ORDER BY (SUM(amount) FILTER (WHERE order_type = 'deposit' AND status = 'APPROVED_EXECUTED') - 
-                  SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status = 'APPROVED_EXECUTED')) DESC
+        ORDER BY (SUM(amount) FILTER (WHERE order_type = 'deposit' AND status IN ('approved', 'APPROVED_EXECUTED')) - 
+                  SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status IN ('approved', 'APPROVED_EXECUTED'))) DESC
     """)
     
     return {

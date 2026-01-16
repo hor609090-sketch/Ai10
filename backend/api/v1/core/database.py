@@ -72,8 +72,6 @@ async def init_api_v1_db():
                 manual_approval_only BOOLEAN DEFAULT FALSE,
                 no_bonus BOOLEAN DEFAULT FALSE,
                 visibility_level VARCHAR(20) DEFAULT 'full',
-                -- User preferences
-                auto_game_load BOOLEAN DEFAULT false,
                 -- Metadata
                 last_ip VARCHAR(45),
                 created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -89,7 +87,6 @@ async def init_api_v1_db():
             ("manual_approval_only", "BOOLEAN DEFAULT FALSE"),
             ("no_bonus", "BOOLEAN DEFAULT FALSE"),
             ("visibility_level", "VARCHAR(20) DEFAULT 'full'"),
-            ("auto_game_load", "BOOLEAN DEFAULT false"),
         ]
         for col_name, col_def in user_columns:
             try:
@@ -327,18 +324,6 @@ async def init_api_v1_db():
                 rejection_reason TEXT,
                 approved_by VARCHAR(36),
                 approved_at TIMESTAMPTZ,
-                -- Approval tracking (actor identification)
-                approved_by_type VARCHAR(20),
-                approved_by_id VARCHAR(100),
-                -- Amount adjustment tracking
-                amount_adjusted BOOLEAN DEFAULT FALSE,
-                adjusted_by VARCHAR(100),
-                adjusted_at TIMESTAMPTZ,
-                -- Execution tracking (IMMEDIATE on approval)
-                executed_at TIMESTAMPTZ,
-                execution_result JSONB,
-                execution_error TEXT,
-                execution_attempts INTEGER DEFAULT 0,
                 idempotency_key VARCHAR(100) UNIQUE,
                 metadata JSONB DEFAULT '{}',
                 created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -360,11 +345,7 @@ async def init_api_v1_db():
             ("adjusted_by", "VARCHAR(100)"),
             ("adjusted_at", "TIMESTAMPTZ"),
             ("executed_at", "TIMESTAMPTZ"),
-            ("execution_result", "JSONB"),
-            ("execution_error", "TEXT"),
-            ("execution_attempts", "INTEGER DEFAULT 0"),
-            ("approved_by_type", "VARCHAR(20)"),
-            ("approved_by_id", "VARCHAR(100)"),
+            ("execution_result", "TEXT"),
         ]
         for col_name, col_def in order_columns:
             try:
@@ -613,25 +594,10 @@ async def init_api_v1_db():
                 balance_after FLOAT NOT NULL,
                 reference_type VARCHAR(30),
                 reference_id VARCHAR(36),
-                source_type VARCHAR(30) DEFAULT 'external',
-                requires_approval BOOLEAN DEFAULT true,
-                order_id VARCHAR(36),
                 description TEXT,
                 created_at TIMESTAMPTZ DEFAULT NOW()
             )
         ''')
-        
-        # Add missing columns to wallet_ledger (for existing databases)
-        ledger_columns = [
-            ("source_type", "VARCHAR(30) DEFAULT 'external'"),
-            ("requires_approval", "BOOLEAN DEFAULT true"),
-            ("order_id", "VARCHAR(36)"),
-        ]
-        for col_name, col_def in ledger_columns:
-            try:
-                await conn.execute(f'ALTER TABLE wallet_ledger ADD COLUMN IF NOT EXISTS {col_name} {col_def}')
-            except Exception as e:
-                logger.debug(f"Column {col_name} may already exist: {e}")
         
         # ==================== GAME LOAD HISTORY ====================
         await conn.execute('''

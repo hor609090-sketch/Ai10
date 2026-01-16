@@ -71,11 +71,12 @@ async def upload_payment_proof(
     
     now = datetime.now(timezone.utc)
     
-    # Update order status to pending_review (NO proof_url stored)
+    # Update order status to PENDING_REVIEW (NO proof_url stored)
+    # CANONICAL STATUS: PENDING_REVIEW (awaiting admin approval)
     await execute('''
         UPDATE orders 
         SET payment_proof_uploaded_at = $1,
-            status = 'pending_review',
+            status = 'PENDING_REVIEW',
             updated_at = NOW()
         WHERE order_id = $2
     ''', now, order_id)
@@ -130,12 +131,7 @@ async def process_order_action(
     data: OrderActionRequest,
     authorization: str = Header(..., alias="Authorization")
 ):
-    """
-    Process order approval/rejection
-    
-    CRITICAL: This endpoint MUST use approval_service ONLY.
-    Direct status/wallet updates are FORBIDDEN.
-    """
+    """Process order approval/rejection"""
     auth = await require_auth(request, authorization=authorization)
     
     # Check admin role
@@ -148,27 +144,99 @@ async def process_order_action(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    # ==================== USE APPROVAL SERVICE (MANDATORY) ====================
-    # All approvals MUST go through single authority
-    from ..core.approval_service import approve_or_reject_order, ActorType
+    # Accept both legacy and canonical pending statuses
+    valid_pending_statuses = ['pending_review', 'PENDING_REVIEW', 'awaiting_payment_proof', 'initiated', 'pending']
+    if order['status'] not in valid_pending_statuses:
+        raise HTTPException(status_code=400, detail=f"Cannot process order in '{order['status']}' status")
     
-    result = await approve_or_reject_order(
-        order_id=order_id,
-        action=data.action,
-        actor_type=ActorType.ADMIN,
-        actor_id=auth.user_id,
-        rejection_reason=data.reason
-    )
+    now = datetime.now(timezone.utc)
     
-    if not result.success:
-        raise HTTPException(status_code=400, detail=result.message)
+    if data.action == 'approve':
+        # CANONICAL STATUS: APPROVED_EXECUTED
+        new_status = 'APPROVED_EXECUTED'
+        
+        # Update user balances based on order type
+        if order['order_type'] == 'deposit':
+            await execute('''
+                UPDATE users 
+                SET real_balance = real_balance + $1,
+                    bonus_balance = bonus_balance + $2,
+                    deposit_count = deposit_count + 1,
+                    total_deposited = total_deposited + $3,
+                    updated_at = NOW()
+                WHERE user_id = $4
+            ''', order['amount'], order['bonus_amount'], order['amount'], order['user_id'])
+        elif order['order_type'] == 'withdrawal':
+            await execute('''
+                UPDATE users 
+                SET real_balance = real_balance - $1,
+                    total_withdrawn = total_withdrawn + $1,
+                    updated_at = NOW()
+                WHERE user_id = $2
+            ''', order['amount'], order['user_id'])
+        
+        await execute('''
+            UPDATE orders 
+            SET status = $1, approved_by = $2, approved_at = $3, executed_at = $4, 
+                execution_result = 'Executed via admin UI', updated_at = NOW()
+            WHERE order_id = $5
+        ''', new_status, auth.user_id, now, now, order_id)
+        
+        await log_audit(auth.user_id, auth.username, "order.approved", "order", order_id, {
+            "amount": order['amount'],
+            "type": order['order_type'],
+            "final_status": "APPROVED_EXECUTED"
+        })
+        
+        # Emit ORDER_APPROVED notification
+        await emit_event(
+            event_type=EventType.ORDER_APPROVED,
+            title="✅ Order Approved & Executed",
+            message=f"Order for @{order['username']} approved\nAmount: ₱{order['amount']:,.2f}",
+            reference_id=order_id,
+            reference_type="order",
+            user_id=order['user_id'],
+            username=order['username'],
+            amount=order['amount'],
+            extra_data={"final_status": "APPROVED_EXECUTED"},
+            requires_action=False
+        )
+        
+    elif data.action == 'reject':
+        # CANONICAL STATUS: REJECTED
+        new_status = 'REJECTED'
+        
+        await execute('''
+            UPDATE orders 
+            SET status = $1, rejection_reason = $2, approved_by = $3, approved_at = $4, updated_at = NOW()
+            WHERE order_id = $5
+        ''', new_status, data.reason or 'Rejected by admin', auth.user_id, now, order_id)
+        
+        await log_audit(auth.user_id, auth.username, "order.rejected", "order", order_id, {
+            "reason": data.reason
+        })
+        
+        # Emit ORDER_REJECTED notification
+        await emit_event(
+            event_type=EventType.ORDER_REJECTED,
+            title="❌ Order Rejected",
+            message=f"Order for @{order['username']} rejected\nReason: {data.reason or 'Admin rejection'}",
+            reference_id=order_id,
+            reference_type="order",
+            user_id=order['user_id'],
+            username=order['username'],
+            amount=order['amount'],
+            extra_data={"reason": data.reason, "final_status": "REJECTED"},
+            requires_action=False
+        )
+    else:
+        raise HTTPException(status_code=400, detail="Invalid action. Use 'approve' or 'reject'")
     
     return {
         "success": True,
-        "message": result.message,
+        "message": f"Order {new_status}",
         "order_id": order_id,
-        "action": data.action,
-        "data": result.data
+        "status": new_status
     }
 
 

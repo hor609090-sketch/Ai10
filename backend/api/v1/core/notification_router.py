@@ -4,12 +4,19 @@ Central service for emitting events and routing to subscribed Telegram bots
 
 This is a DELIVERY CHANNEL, not business logic.
 All events are standardized and reusable for future channels (email, webhook, etc)
+
+PROOF IMAGE POLICY:
+- Base64 image data is sent DIRECTLY to Telegram via sendDocument
+- Image data is NEVER stored in database (only hashes for duplicate detection)
+- Images in extra_data['proof_image'] are handled specially
 """
 import asyncio
 import uuid
 import json
 import logging
 import httpx
+import base64
+import io
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from enum import Enum
@@ -57,12 +64,6 @@ class EventType(str, Enum):
     WITHDRAW_REQUESTED = "WITHDRAW_REQUESTED"
     WITHDRAW_APPROVED = "WITHDRAW_APPROVED"
     WITHDRAW_REJECTED = "WITHDRAW_REJECTED"
-    WITHDRAW_EXECUTED = "WITHDRAW_EXECUTED"
-    WITHDRAW_FAILED = "WITHDRAW_FAILED"
-    
-    # Execution Events (NEW)
-    ORDER_EXECUTED = "ORDER_EXECUTED"
-    ORDER_EXECUTION_FAILED = "ORDER_EXECUTION_FAILED"
     
     # Referral Events
     REFERRAL_JOINED = "REFERRAL_JOINED"
@@ -207,30 +208,6 @@ EVENT_METADATA = {
         "label": "Withdrawal Rejected",
         "description": "Withdrawal rejected",
         "category": "Withdrawals",
-        "requires_approval": False
-    },
-    EventType.WITHDRAW_EXECUTED: {
-        "label": "Withdrawal Executed",
-        "description": "Withdrawal executed and paid out",
-        "category": "Withdrawals",
-        "requires_approval": False
-    },
-    EventType.WITHDRAW_FAILED: {
-        "label": "Withdrawal Failed",
-        "description": "Withdrawal execution failed",
-        "category": "Withdrawals",
-        "requires_approval": False
-    },
-    EventType.ORDER_EXECUTED: {
-        "label": "Order Executed",
-        "description": "Order approved and executed successfully",
-        "category": "Orders",
-        "requires_approval": False
-    },
-    EventType.ORDER_EXECUTION_FAILED: {
-        "label": "Order Execution Failed",
-        "description": "Order execution failed after approval",
-        "category": "Orders",
         "requires_approval": False
     },
     EventType.REFERRAL_JOINED: {
@@ -466,7 +443,15 @@ class NotificationRouter:
         payload: NotificationPayload,
         show_approval_buttons: bool = False
     ) -> Dict[str, Any]:
-        """Send notification to a specific Telegram bot"""
+        """
+        Send notification to a specific Telegram bot.
+        
+        PROOF IMAGE HANDLING:
+        - Checks extra_data for 'proof_image' (base64) or 'image_url' (URL)
+        - Base64 images are decoded and sent via sendDocument as file upload
+        - URL images are sent via sendPhoto
+        - Images are NEVER stored in database
+        """
         try:
             bot_token = bot['bot_token']
             chat_id = bot['chat_id']
@@ -520,62 +505,76 @@ class NotificationRouter:
                     result = response.json()
                     message_id = result.get('result', {}).get('message_id')
                     
-                    # ==================== PROOF IMAGE HANDLING ====================
-                    # CRITICAL: Extract proof from extra_data and send directly to Telegram
-                    # This image is NEVER stored in DB (redacted before logging)
-                    
+                    # Handle proof images - check both extra_data and payload.image_url
                     proof_image_sent = False
                     
-                    # Check for proof image in extra_data (base64)
-                    if payload.extra_data and 'proof_image' in payload.extra_data:
-                        proof_base64 = payload.extra_data.get('proof_image')
-                        if proof_base64 and isinstance(proof_base64, str) and len(proof_base64) > 100:
-                            try:
-                                # Send base64 image as document
-                                import base64
-                                
-                                # Extract image data
-                                if ',' in proof_base64:
-                                    proof_base64 = proof_base64.split(',', 1)[1]
-                                
-                                # Convert base64 to bytes
-                                image_bytes = base64.b64decode(proof_base64)
-                                
-                                # Send as document (better for large images)
-                                files = {'document': ('proof.jpg', image_bytes, 'image/jpeg')}
-                                doc_data = {
-                                    'chat_id': chat_id,
-                                    'caption': f"📸 Payment Proof\n{payload.reference_type or 'Request'} ID: {payload.reference_id[:8] if payload.reference_id else 'N/A'}..."
-                                }
-                                
-                                doc_response = await client.post(
-                                    f"https://api.telegram.org/bot{bot_token}/sendDocument",
-                                    data=doc_data,
-                                    files=files
-                                )
-                                
-                                if doc_response.status_code == 200:
-                                    proof_image_sent = True
-                                    logger.info(f"Proof image sent to Telegram bot {bot['name']}")
-                                
-                            except Exception as img_err:
-                                logger.error(f"Failed to send base64 proof to bot {bot['name']}: {img_err}")
+                    # Check for base64 proof_image in extra_data (SITE UPLOADS)
+                    extra_data = payload.extra_data or {}
+                    base64_proof = extra_data.get('proof_image')
                     
-                    # Fallback: If there's an image URL, send via sendPhoto
-                    if not proof_image_sent and payload.image_url:
+                    if base64_proof:
+                        try:
+                            # Remove data URL prefix if present
+                            if ',' in base64_proof:
+                                base64_proof = base64_proof.split(',', 1)[1]
+                            
+                            # Decode base64 to bytes
+                            image_bytes = base64.b64decode(base64_proof)
+                            
+                            # Determine file extension from image_type if available
+                            image_type = extra_data.get('image_type', 'image/jpeg')
+                            ext = 'jpg'
+                            if 'png' in image_type:
+                                ext = 'png'
+                            elif 'gif' in image_type:
+                                ext = 'gif'
+                            
+                            # Create filename
+                            ref_short = payload.reference_id[:8] if payload.reference_id else 'proof'
+                            filename = f"payment_proof_{ref_short}.{ext}"
+                            
+                            # Send as document (file upload) - more reliable for large images
+                            files = {
+                                'document': (filename, io.BytesIO(image_bytes), image_type)
+                            }
+                            form_data = {
+                                'chat_id': chat_id,
+                                'caption': f"📎 Payment Proof for {payload.reference_type or 'request'} {ref_short}..."
+                            }
+                            
+                            img_response = await client.post(
+                                f"https://api.telegram.org/bot{bot_token}/sendDocument",
+                                data=form_data,
+                                files=files
+                            )
+                            
+                            if img_response.status_code == 200:
+                                proof_image_sent = True
+                                logger.info(f"Base64 proof image sent to bot {bot['name']} for {payload.reference_id}")
+                            else:
+                                logger.warning(f"Failed to send base64 proof image: {img_response.text}")
+                                
+                        except Exception as img_err:
+                            logger.warning(f"Failed to decode/send base64 proof image to bot {bot['name']}: {img_err}")
+                    
+                    # Check for image_url in extra_data (CHATWOOT/WEBHOOK UPLOADS)
+                    image_url = extra_data.get('image_url') or payload.image_url
+                    if image_url and not proof_image_sent:
                         try:
                             await client.post(
                                 f"https://api.telegram.org/bot{bot_token}/sendPhoto",
                                 json={
                                     "chat_id": chat_id,
-                                    "photo": payload.image_url,
-                                    "caption": f"Proof for {payload.reference_type or 'request'} {payload.reference_id[:8] if payload.reference_id else 'N/A'}..."
+                                    "photo": image_url,
+                                    "caption": f"📎 Proof for {payload.reference_type or 'request'} {payload.reference_id[:8] if payload.reference_id else 'N/A'}..."
                                 }
                             )
+                            proof_image_sent = True
+                            logger.info(f"URL proof image sent to bot {bot['name']} for {payload.reference_id}")
                         except Exception as img_err:
-                            logger.warning(f"Failed to send image URL to bot {bot['name']}: {img_err}")
+                            logger.warning(f"Failed to send URL image to bot {bot['name']}: {img_err}")
                     
-                    return {"success": True, "message_id": message_id}
+                    return {"success": True, "message_id": message_id, "proof_image_sent": proof_image_sent}
                 else:
                     return {"success": False, "error": response.text}
                     
@@ -626,45 +625,6 @@ class NotificationRouter:
         return "\n".join(lines)
     
     @staticmethod
-    def _redact_sensitive_data(payload: Dict) -> Dict:
-        """
-        Redact sensitive data from payload before DB storage
-        
-        CRITICAL: Remove ALL image data:
-        - base64 images
-        - image URLs
-        - proof_image fields
-        - Any binary/large data
-        """
-        redacted = payload.copy()
-        
-        # Remove image fields
-        if 'image_url' in redacted:
-            redacted['image_url'] = '<REDACTED>'
-        
-        if 'extra_data' in redacted and isinstance(redacted['extra_data'], dict):
-            extra = redacted['extra_data'].copy()
-            
-            # List of fields to redact
-            sensitive_fields = [
-                'proof_image', 'payment_proof', 'image_data', 
-                'base64_image', 'image_url', 'proof_url',
-                'proof_data', 'screenshot', 'attachment'
-            ]
-            
-            for field in sensitive_fields:
-                if field in extra:
-                    # Store metadata only
-                    if isinstance(extra[field], str) and len(extra[field]) > 100:
-                        extra[field] = f'<REDACTED_LENGTH_{len(extra[field])}>'
-                    else:
-                        extra[field] = '<REDACTED>'
-            
-            redacted['extra_data'] = extra
-        
-        return redacted
-    
-    @staticmethod
     async def _log_notification(
         log_id: str,
         event_type: str,
@@ -675,15 +635,29 @@ class NotificationRouter:
         details: List[Dict]
     ):
         """
-        Log notification to database
+        Log notification to database.
         
-        CRITICAL: Payload is REDACTED before storage.
-        NO image data, base64, or large binary data stored.
+        PROOF IMAGE POLICY: 
+        - NEVER store base64 image data or image URLs in notification_logs
+        - Redact 'proof_image', 'image_data', 'image_url' from payload before storage
         """
         status = "success" if not failed else ("partial" if success else "failed")
         
-        # REDACT sensitive data before storing
-        redacted_payload = NotificationRouter._redact_sensitive_data(payload)
+        # REDACT sensitive image data before storing
+        redacted_payload = payload.copy()
+        
+        # Redact from top level
+        for key in ['proof_image', 'image_data', 'image_url']:
+            if key in redacted_payload:
+                redacted_payload[key] = '[REDACTED - sent to Telegram directly]'
+        
+        # Redact from extra_data if present
+        if 'extra_data' in redacted_payload and isinstance(redacted_payload['extra_data'], dict):
+            extra = redacted_payload['extra_data'].copy()
+            for key in ['proof_image', 'image_data', 'image_url']:
+                if key in extra:
+                    extra[key] = '[REDACTED - sent to Telegram directly]'
+            redacted_payload['extra_data'] = extra
         
         await execute("""
             INSERT INTO notification_logs 
