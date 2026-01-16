@@ -380,22 +380,10 @@ async def init_api_v1_db():
             )
         ''')
         
-        # ==================== TELEGRAM CONFIG (LEGACY - DEPRECATED) ====================
-        # Keeping table for backwards compat but NOT seeding data
-        # Use telegram_bots table for multi-bot system instead
-        await conn.execute('''
-            CREATE TABLE IF NOT EXISTS telegram_config (
-                id VARCHAR(36) PRIMARY KEY DEFAULT 'default',
-                bot_token VARCHAR(255),
-                admin_chat_id VARCHAR(100),
-                notification_chat_id VARCHAR(100),
-                forward_payments BOOLEAN DEFAULT FALSE,
-                forward_deposits BOOLEAN DEFAULT FALSE,
-                forward_withdrawals BOOLEAN DEFAULT FALSE,
-                inline_actions JSONB DEFAULT '[]',
-                updated_at TIMESTAMPTZ DEFAULT NOW()
-            )
-        ''')
+        # ==================== LEGACY TELEGRAM CONFIG TABLE DELETED ====================
+        # Table telegram_config REMOVED per system requirements.
+        # Use telegram_bots table (multi-bot system) ONLY.
+        # If upgrading from old system, manually migrate data to telegram_bots.
         
         # ==================== SYSTEM SETTINGS ====================
         await conn.execute('''
