@@ -520,8 +520,49 @@ class NotificationRouter:
                     result = response.json()
                     message_id = result.get('result', {}).get('message_id')
                     
-                    # If there's an image, send it as follow-up
-                    if payload.image_url:
+                    # ==================== PROOF IMAGE HANDLING ====================
+                    # CRITICAL: Extract proof from extra_data and send directly to Telegram
+                    # This image is NEVER stored in DB (redacted before logging)
+                    
+                    proof_image_sent = False
+                    
+                    # Check for proof image in extra_data (base64)
+                    if payload.extra_data and 'proof_image' in payload.extra_data:
+                        proof_base64 = payload.extra_data.get('proof_image')
+                        if proof_base64 and isinstance(proof_base64, str) and len(proof_base64) > 100:
+                            try:
+                                # Send base64 image as document
+                                import base64
+                                
+                                # Extract image data
+                                if ',' in proof_base64:
+                                    proof_base64 = proof_base64.split(',', 1)[1]
+                                
+                                # Convert base64 to bytes
+                                image_bytes = base64.b64decode(proof_base64)
+                                
+                                # Send as document (better for large images)
+                                files = {'document': ('proof.jpg', image_bytes, 'image/jpeg')}
+                                doc_data = {
+                                    'chat_id': chat_id,
+                                    'caption': f"📸 Payment Proof\n{payload.reference_type or 'Request'} ID: {payload.reference_id[:8] if payload.reference_id else 'N/A'}..."
+                                }
+                                
+                                doc_response = await client.post(
+                                    f"https://api.telegram.org/bot{bot_token}/sendDocument",
+                                    data=doc_data,
+                                    files=files
+                                )
+                                
+                                if doc_response.status_code == 200:
+                                    proof_image_sent = True
+                                    logger.info(f"Proof image sent to Telegram bot {bot['name']}")
+                                
+                            except Exception as img_err:
+                                logger.error(f"Failed to send base64 proof to bot {bot['name']}: {img_err}")
+                    
+                    # Fallback: If there's an image URL, send via sendPhoto
+                    if not proof_image_sent and payload.image_url:
                         try:
                             await client.post(
                                 f"https://api.telegram.org/bot{bot_token}/sendPhoto",
@@ -532,7 +573,7 @@ class NotificationRouter:
                                 }
                             )
                         except Exception as img_err:
-                            logger.warning(f"Failed to send image to bot {bot['name']}: {img_err}")
+                            logger.warning(f"Failed to send image URL to bot {bot['name']}: {img_err}")
                     
                     return {"success": True, "message_id": message_id}
                 else:
