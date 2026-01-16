@@ -634,14 +634,36 @@ class NotificationRouter:
         failed: List[str],
         details: List[Dict]
     ):
-        """Log notification to database"""
+        """
+        Log notification to database.
+        
+        PROOF IMAGE POLICY: 
+        - NEVER store base64 image data or image URLs in notification_logs
+        - Redact 'proof_image', 'image_data', 'image_url' from payload before storage
+        """
         status = "success" if not failed else ("partial" if success else "failed")
+        
+        # REDACT sensitive image data before storing
+        redacted_payload = payload.copy()
+        
+        # Redact from top level
+        for key in ['proof_image', 'image_data', 'image_url']:
+            if key in redacted_payload:
+                redacted_payload[key] = '[REDACTED - sent to Telegram directly]'
+        
+        # Redact from extra_data if present
+        if 'extra_data' in redacted_payload and isinstance(redacted_payload['extra_data'], dict):
+            extra = redacted_payload['extra_data'].copy()
+            for key in ['proof_image', 'image_data', 'image_url']:
+                if key in extra:
+                    extra[key] = '[REDACTED - sent to Telegram directly]'
+            redacted_payload['extra_data'] = extra
         
         await execute("""
             INSERT INTO notification_logs 
             (log_id, event_type, payload, sent_to_bot_ids, success_bot_ids, failed_bot_ids, status, error_details, created_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-        """, log_id, event_type, json.dumps(payload), sent_to, success, failed, status, json.dumps(details))
+        """, log_id, event_type, json.dumps(redacted_payload), sent_to, success, failed, status, json.dumps(details))
     
     @staticmethod
     async def get_all_events() -> List[Dict]:
