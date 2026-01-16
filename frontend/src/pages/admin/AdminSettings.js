@@ -7,7 +7,7 @@ import {
   MessageCircle, Clock, UserCheck, DollarSign
 } from 'lucide-react';
 
-const API = process.env.REACT_APP_BACKEND_URL;
+import { API_BASE } from "../../utils/api";
 
 const AdminSettings = () => {
   const { token } = useAuth();
@@ -32,7 +32,7 @@ const AdminSettings = () => {
 
   const fetchSettings = async () => {
     try {
-      const response = await axios.get(`${API}/api/v1/admin/settings`, config);
+      const response = await axios.get(`API_BASE}/api/v1/admin/settings`, config);
       setSettings(response.data);
     } catch (error) {
       console.error('Failed to fetch settings:', error);
@@ -44,7 +44,7 @@ const AdminSettings = () => {
   const saveGlobalSettings = async (updates) => {
     setSaving(true);
     try {
-      await axios.put(`${API}/api/v1/admin/settings`, updates, config);
+      await axios.put(`API_BASE}/api/v1/admin/settings`, updates, config);
       await fetchSettings();
       alert('Settings saved successfully');
     } catch (error) {
@@ -57,7 +57,7 @@ const AdminSettings = () => {
   const saveTiers = async (tiers) => {
     setSaving(true);
     try {
-      await axios.put(`${API}/api/v1/admin/settings`, { referral_tiers: tiers }, config);
+      await axios.put(`API_BASE}/api/v1/admin/settings`, { referral_tiers: tiers }, config);
       await fetchSettings();
       setShowTierModal(false);
       setEditingTier(null);
@@ -71,7 +71,7 @@ const AdminSettings = () => {
   const deleteTier = async (tierNumber) => {
     if (!window.confirm('Delete this tier?')) return;
     try {
-      await axios.put(`${API}/api/v1/admin/settings`, { remove_tier: tierNumber }, config);
+      await axios.put(`API_BASE}/api/v1/admin/settings`, { remove_tier: tierNumber }, config);
       await fetchSettings();
     } catch (error) {
       alert(error.response?.data?.detail || 'Failed to delete tier');
@@ -81,7 +81,7 @@ const AdminSettings = () => {
   const saveMilestones = async (milestones) => {
     setSaving(true);
     try {
-      await axios.put(`${API}/api/v1/admin/settings`, { bonus_milestones: milestones }, config);
+      await axios.put(`API_BASE}/api/v1/admin/settings`, { bonus_milestones: milestones }, config);
       await fetchSettings();
       setShowMilestoneModal(false);
       setEditingMilestone(null);
@@ -95,7 +95,7 @@ const AdminSettings = () => {
   const saveAntifraud = async (updates) => {
     setSaving(true);
     try {
-      await axios.put(`${API}/api/v1/admin/settings`, { anti_fraud: updates }, config);
+      await axios.put(`API_BASE}/api/v1/admin/settings`, { anti_fraud: updates }, config);
       await fetchSettings();
       alert('Anti-fraud settings saved');
     } catch (error) {
@@ -108,7 +108,7 @@ const AdminSettings = () => {
   const saveActiveReferralCriteria = async (criteria) => {
     setSaving(true);
     try {
-      await axios.put(`${API}/admin/settings/active-referral-criteria`, criteria, config);
+      await axios.put(`API_BASE}/admin/settings/active-referral-criteria`, criteria, config);
       await fetchSettings();
       alert('Active referral criteria saved');
     } catch (error) {
@@ -121,7 +121,7 @@ const AdminSettings = () => {
   const saveGreetingSettings = async (greetingConfig) => {
     setSaving(true);
     try {
-      await axios.put(`${API}/admin/settings/first-time-greeting`, greetingConfig, config);
+      await axios.put(`API_BASE}/admin/settings/first-time-greeting`, greetingConfig, config);
       await fetchSettings();
       alert('Greeting settings saved');
     } catch (error) {
@@ -133,7 +133,7 @@ const AdminSettings = () => {
 
   const addGreetingMessage = async (message) => {
     try {
-      await axios.post(`${API}/admin/settings/first-time-greeting/messages`, message, config);
+      await axios.post(`API_BASE}/admin/settings/first-time-greeting/messages`, message, config);
       await fetchSettings();
       setShowGreetingModal(false);
       setEditingGreeting(null);
@@ -145,7 +145,7 @@ const AdminSettings = () => {
   const deleteGreetingMessage = async (order) => {
     if (!window.confirm('Delete this greeting message?')) return;
     try {
-      await axios.delete(`${API}/admin/settings/first-time-greeting/messages/${order}`, config);
+      await axios.delete(`API_BASE}/admin/settings/first-time-greeting/messages/${order}`, config);
       await fetchSettings();
     } catch (error) {
       alert(error.response?.data?.detail || 'Failed to delete');
@@ -155,7 +155,7 @@ const AdminSettings = () => {
   const resetToDefaults = async (section = 'all') => {
     if (!window.confirm(`Reset ${section} settings to defaults?`)) return;
     try {
-      await axios.post(`${API}/admin/settings/reset-defaults?section=${section}`, {}, config);
+      await axios.post(`API_BASE}/admin/settings/reset-defaults?section=${section}`, {}, config);
       await fetchSettings();
       alert('Settings reset to defaults');
     } catch (error) {
@@ -438,7 +438,7 @@ const AdminSettings = () => {
                           onClick={async () => {
                             if (window.confirm('Delete this milestone?')) {
                               try {
-                                await axios.delete(`${API}/admin/settings/bonus-milestones/${milestone.milestone_number}`, config);
+                                await axios.delete(`API_BASE}/admin/settings/bonus-milestones/${milestone.milestone_number}`, config);
                                 await fetchSettings();
                               } catch (err) {
                                 alert('Failed to delete');

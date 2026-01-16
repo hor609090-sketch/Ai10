@@ -7,7 +7,7 @@ import { Label } from '../../components/ui/label';
 import { toast } from 'sonner';
 import { Gift, Plus, RefreshCw, Ban, Eye } from 'lucide-react';
 
-const API = process.env.REACT_APP_BACKEND_URL;
+import { API_BASE } from "../../utils/api";
 
 const AdminPromoCodes = () => {
   const { token } = useAuth();
@@ -26,7 +26,7 @@ const AdminPromoCodes = () => {
   const fetchCodes = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API}/api/v1/admin/promo-codes`, {
+      const res = await fetch(`API_BASE}/api/v1/admin/promo-codes`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -47,7 +47,7 @@ const AdminPromoCodes = () => {
     }
     setCreating(true);
     try {
-      const res = await fetch(`${API}/api/v1/admin/promo-codes`, {
+      const res = await fetch(`API_BASE}/api/v1/admin/promo-codes`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -77,7 +77,7 @@ const AdminPromoCodes = () => {
 
   const disableCode = async (codeId) => {
     try {
-      const res = await fetch(`${API}/api/v1/admin/promo-codes/${codeId}/disable`, {
+      const res = await fetch(`API_BASE}/api/v1/admin/promo-codes/${codeId}/disable`, {
         method: 'PUT',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -93,7 +93,7 @@ const AdminPromoCodes = () => {
   const viewRedemptions = async (codeId) => {
     setSelectedCode(codeId);
     try {
-      const res = await fetch(`${API}/api/v1/admin/promo-codes/${codeId}/redemptions`, {
+      const res = await fetch(`API_BASE}/api/v1/admin/promo-codes/${codeId}/redemptions`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {

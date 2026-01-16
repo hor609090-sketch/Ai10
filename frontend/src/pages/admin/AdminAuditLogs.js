@@ -3,7 +3,7 @@ import axios from 'axios';
 import { useAuth } from '../../context/AuthContext';
 import { FileText, User, Clock } from 'lucide-react';
 
-const API = process.env.REACT_APP_BACKEND_URL;
+import { API_BASE } from "../../utils/api";
 
 const AdminAuditLogs = () => {
   const { token } = useAuth();
@@ -16,7 +16,7 @@ const AdminAuditLogs = () => {
 
   const fetchLogs = async () => {
     try {
-      const response = await axios.get(`${API}/api/v1/admin/audit-logs`, {
+      const response = await axios.get(`API_BASE}/api/v1/admin/audit-logs`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setLogs(response.data.logs || []);

@@ -21,7 +21,7 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 
-const API = process.env.REACT_APP_BACKEND_URL;
+import { API_BASE } from "../../utils/api";
 
 /**
  * ORDERS PAGE
@@ -45,7 +45,7 @@ const AdminOrders = () => {
   const fetchOrders = async (type) => {
     setLoading(true);
     try {
-      let url = `${API}/api/v1/admin/orders?limit=50`;
+      let url = `API_BASE}/api/v1/admin/orders?limit=50`;
       if (type && type !== 'all') {
         if (['deposit', 'withdrawal'].includes(type)) {
           url += `&order_type=${type}`;
@@ -75,7 +75,7 @@ const AdminOrders = () => {
 
   const fetchOrderDetail = async (orderId) => {
     try {
-      const res = await fetch(`${API}/api/v1/admin/orders/${orderId}`, {
+      const res = await fetch(`API_BASE}/api/v1/admin/orders/${orderId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
