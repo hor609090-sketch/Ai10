@@ -4,12 +4,19 @@ Central service for emitting events and routing to subscribed Telegram bots
 
 This is a DELIVERY CHANNEL, not business logic.
 All events are standardized and reusable for future channels (email, webhook, etc)
+
+PROOF IMAGE POLICY:
+- Base64 image data is sent DIRECTLY to Telegram via sendDocument
+- Image data is NEVER stored in database (only hashes for duplicate detection)
+- Images in extra_data['proof_image'] are handled specially
 """
 import asyncio
 import uuid
 import json
 import logging
 import httpx
+import base64
+import io
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 from enum import Enum
