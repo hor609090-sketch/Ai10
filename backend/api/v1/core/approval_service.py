@@ -440,14 +440,65 @@ async def _process_approval(
             requires_action=False
         )
     
+    # Emit execution success events
+    if execution_result and execution_result.get('success'):
+        if order_type == 'game_load':
+            await emit_event(
+                event_type=EventType.GAME_LOAD_SUCCESS,
+                title="Game Load Executed",
+                message=f"Game load executed successfully!\n\nClient: {user.get('display_name', user['username'])}\nGame: {execution_result.get('game_display_name', 'Unknown')}\nAmount: ₱{amount:,.2f}\nWallet Balance: ₱{execution_result.get('wallet_balance_remaining', 0):,.2f}",
+                reference_id=order_id,
+                reference_type="order",
+                user_id=user['user_id'],
+                username=user.get('username'),
+                display_name=user.get('display_name'),
+                amount=amount,
+                extra_data={
+                    "load_id": execution_result.get('load_id'),
+                    "game_name": execution_result.get('game_name'),
+                    "wallet_balance_remaining": execution_result.get('wallet_balance_remaining')
+                },
+                requires_action=False
+            )
+        elif order_type == 'withdrawal':
+            await emit_event(
+                event_type=EventType.WITHDRAW_EXECUTED,
+                title="Withdrawal Executed",
+                message=f"Withdrawal executed successfully!\n\nClient: {user.get('display_name', user['username'])}\nPayout: ₱{execution_result.get('payout_amount', amount):,.2f}\nVoid: ₱{execution_result.get('void_amount', 0):,.2f}",
+                reference_id=order_id,
+                reference_type="order",
+                user_id=user['user_id'],
+                username=user.get('username'),
+                display_name=user.get('display_name'),
+                amount=amount,
+                extra_data=execution_result,
+                requires_action=False
+            )
+        elif order_type in ['wallet_topup', 'deposit']:
+            await emit_event(
+                event_type=EventType.WALLET_TOPUP_APPROVED,
+                title="Wallet Top-up Executed",
+                message=f"Wallet top-up executed successfully!\n\nClient: {user.get('display_name', user['username'])}\nAmount: ₱{amount:,.2f}\nNew Balance: ₱{execution_result.get('wallet_balance', 0):,.2f}",
+                reference_id=order_id,
+                reference_type="order",
+                user_id=user['user_id'],
+                username=user.get('username'),
+                display_name=user.get('display_name'),
+                amount=amount,
+                extra_data=execution_result,
+                requires_action=False
+            )
+    
     return ApprovalResult(
         True, 
-        "Order approved successfully",
+        "Order approved and executed successfully",
         {
             "order_id": order_id,
             "amount": amount,
             "amount_adjusted": amount_adjusted,
-            "order_type": order_type
+            "order_type": order_type,
+            "executed": executed_at is not None,
+            "execution_result": execution_result
         }
     )
 
