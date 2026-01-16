@@ -1,14 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { API_BASE } from '../../utils/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { 
   BarChart3, RefreshCw, DollarSign, TrendingUp, Ban, Gamepad2, 
   AlertTriangle, Shield, PieChart, Activity 
 } from 'lucide-react';
-
-const API = process.env.REACT_APP_BACKEND_URL;
 
 const AdminReports = () => {
   const { token } = useAuth();
@@ -30,11 +29,11 @@ const AdminReports = () => {
     setLoading(true);
     try {
       const [flowRes, gameRes, voidRes, riskRes, advRes] = await Promise.all([
-        fetch(`${API}/api/v1/admin/reports/balance-flow?days=30`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API}/api/v1/admin/reports/profit-by-game`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API}/api/v1/admin/reports/voids?days=30`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API}/api/v1/admin/analytics/risk-exposure`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${API}/api/v1/admin/analytics/advanced-metrics?days=30`, { headers: { Authorization: `Bearer ${token}` } })
+        fetch(`${API_BASE}/api/v1/admin/reports/balance-flow?days=30`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE}/api/v1/admin/reports/profit-by-game`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE}/api/v1/admin/reports/voids?days=30`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE}/api/v1/admin/analytics/risk-exposure`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_BASE}/api/v1/admin/analytics/advanced-metrics?days=30`, { headers: { Authorization: `Bearer ${token}` } })
       ]);
       if (flowRes.ok) setBalanceFlow(await flowRes.json());
       if (gameRes.ok) {
