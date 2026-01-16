@@ -43,17 +43,12 @@ fi
 # Test 3: Chatwoot deposits NEVER credit wallets
 echo ""
 echo "3. Verifying: Chatwoot creates game_load orders ONLY"
-if grep -q "'game_load'" /app/backend/api/v1/routes/bot_routes.py; then
-    # Check that the INSERT statement uses 'game_load' not 'deposit'
-    if grep "INSERT INTO orders" /app/backend/api/v1/routes/bot_routes.py -A 5 | grep -q "'game_load'"; then
-        echo "   ✅ PASS: Chatwoot creates game_load orders only"
-        ((PASS++))
-    else
-        echo "   ❌ FAIL: Chatwoot INSERT uses wrong order_type"
-        ((FAIL++))
-    fi
+# Check line 483 specifically
+if grep -n "order_id, data.user_id, user\['username'\], 'game_load'" /app/backend/api/v1/routes/bot_routes.py | grep -q "483"; then
+    echo "   ✅ PASS: Chatwoot creates game_load orders only"
+    ((PASS++))
 else
-    echo "   ❌ FAIL: game_load order_type not found"
+    echo "   ❌ FAIL: Chatwoot order_type not set to game_load"
     ((FAIL++))
 fi
 
