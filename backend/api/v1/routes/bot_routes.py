@@ -480,7 +480,7 @@ async def create_order_bot(
             status, idempotency_key, metadata, created_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
     ''',
-        order_id, data.user_id, user['username'], 'deposit',
+        order_id, data.user_id, user['username'], 'game_load',
         data.game_name.lower(), validation['game']['display_name'],
         data.amount, validation['bonus_calculation']['total_bonus'], validation['total_amount'],
         data.referral_code.upper() if data.referral_code else None,
