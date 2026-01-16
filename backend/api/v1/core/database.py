@@ -72,6 +72,8 @@ async def init_api_v1_db():
                 manual_approval_only BOOLEAN DEFAULT FALSE,
                 no_bonus BOOLEAN DEFAULT FALSE,
                 visibility_level VARCHAR(20) DEFAULT 'full',
+                -- User preferences
+                auto_game_load BOOLEAN DEFAULT false,
                 -- Metadata
                 last_ip VARCHAR(45),
                 created_at TIMESTAMPTZ DEFAULT NOW(),
