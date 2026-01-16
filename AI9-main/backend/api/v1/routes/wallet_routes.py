@@ -184,9 +184,10 @@ async def create_wallet_load_request(
             )
     
     # Check for pending requests limit (max 3 pending per user)
+    # Check both legacy 'pending' and canonical 'PENDING_REVIEW' statuses
     pending_count = await fetch_one("""
         SELECT COUNT(*) as count FROM wallet_load_requests 
-        WHERE user_id = $1 AND status = 'pending'
+        WHERE user_id = $1 AND status IN ('pending', 'PENDING_REVIEW', 'pending_review')
     """, user['user_id'])
     
     if pending_count and pending_count['count'] >= 3:
@@ -347,10 +348,11 @@ async def get_wallet_balance(
     user = await get_wallet_user(request, x_portal_token, client_token)
     
     # Get pending loads
+    # Get pending loads - check both legacy and canonical statuses
     pending = await fetch_one("""
         SELECT COALESCE(SUM(amount), 0) as pending_amount
         FROM wallet_load_requests 
-        WHERE user_id = $1 AND status = 'pending'
+        WHERE user_id = $1 AND status IN ('pending', 'PENDING_REVIEW', 'pending_review')
     """, user['user_id'])
     
     return {
