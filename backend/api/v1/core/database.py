@@ -344,6 +344,8 @@ async def init_api_v1_db():
             ("amount_adjusted", "BOOLEAN DEFAULT FALSE"),
             ("adjusted_by", "VARCHAR(100)"),
             ("adjusted_at", "TIMESTAMPTZ"),
+            ("executed_at", "TIMESTAMPTZ"),
+            ("execution_result", "JSONB"),
         ]
         for col_name, col_def in order_columns:
             try:
