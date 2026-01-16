@@ -314,6 +314,9 @@ async def init_api_v1_db():
                 -- Order status
                 status VARCHAR(30) DEFAULT 'initiated',
                 is_suspicious BOOLEAN DEFAULT FALSE,
+                -- PROOF IMAGE POLICY: Never store base64/image data in DB
+                -- payment_proof_url: For metadata/reference ONLY (e.g., Telegram file_id)
+                -- Actual proof images forwarded to Telegram via notification_router
                 payment_proof_url VARCHAR(500),
                 payment_proof_uploaded_at TIMESTAMPTZ,
                 telegram_message_id VARCHAR(100),
