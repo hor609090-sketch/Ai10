@@ -104,10 +104,10 @@ class TestAdminDashboard:
         data = response.json()
         
         # Verify structure
-        assert 'orders' in data
-        assert 'wallet_loads' in data
+        assert 'pending' in data
+        assert 'total' in data
         
-        print(f"✓ Pending approvals: {len(data['orders'])} orders, {len(data['wallet_loads'])} wallet loads")
+        print(f"✓ Pending approvals: {data['total']} total pending items")
     
     def test_games_list_endpoint(self, admin_token):
         """Test /api/v1/admin/games returns games with analytics"""
