@@ -358,6 +358,10 @@ async def init_api_v1_db():
             ("adjusted_at", "TIMESTAMPTZ"),
             ("executed_at", "TIMESTAMPTZ"),
             ("execution_result", "JSONB"),
+            ("execution_error", "TEXT"),
+            ("execution_attempts", "INTEGER DEFAULT 0"),
+            ("approved_by_type", "VARCHAR(20)"),
+            ("approved_by_id", "VARCHAR(100)"),
         ]
         for col_name, col_def in order_columns:
             try:
