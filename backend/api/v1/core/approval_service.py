@@ -265,36 +265,44 @@ async def _process_approval(
             
             if order_type in ['wallet_topup', 'deposit']:
                 # Credit wallet
-                current_balance = float(user.get('real_balance', 0) or 0)
-                new_balance = current_balance + amount
-                
-                await conn.execute("""
-                    UPDATE users SET 
-                        real_balance = $1,
-                        bonus_balance = bonus_balance + $2,
-                        deposit_count = deposit_count + 1,
-                        total_deposited = total_deposited + $3,
-                        updated_at = NOW()
-                    WHERE user_id = $4
-                """, new_balance, bonus_amount, amount, user['user_id'])
-                
-                # Log to ledger
-                await conn.execute("""
-                    INSERT INTO wallet_ledger 
-                    (ledger_id, user_id, transaction_type, amount, balance_before, balance_after,
-                     reference_type, reference_id, description, created_at)
-                    VALUES ($1, $2, 'credit', $3, $4, $5, 'order', $6, $7, NOW())
-                """, str(uuid.uuid4()), user['user_id'], amount,
-                   current_balance, new_balance, order_id,
-                   f"Wallet top-up via {order.get('payment_method', 'N/A')}")
-                
-                execution_result = {
-                    "success": True,
-                    "wallet_credited": amount,
-                    "wallet_balance": new_balance,
-                    "executed_at": now.isoformat()
-                }
-                executed_at = now
+                try:
+                    current_balance = float(user.get('real_balance', 0) or 0)
+                    new_balance = current_balance + amount
+                    
+                    await conn.execute("""
+                        UPDATE users SET 
+                            real_balance = $1,
+                            bonus_balance = bonus_balance + $2,
+                            deposit_count = deposit_count + 1,
+                            total_deposited = total_deposited + $3,
+                            updated_at = NOW()
+                        WHERE user_id = $4
+                    """, new_balance, bonus_amount, amount, user['user_id'])
+                    
+                    # Log to ledger
+                    await conn.execute("""
+                        INSERT INTO wallet_ledger 
+                        (ledger_id, user_id, transaction_type, amount, balance_before, balance_after,
+                         reference_type, reference_id, description, created_at)
+                        VALUES ($1, $2, 'credit', $3, $4, $5, 'order', $6, $7, NOW())
+                    """, str(uuid.uuid4()), user['user_id'], amount,
+                       current_balance, new_balance, order_id,
+                       f"Wallet top-up via {order.get('payment_method', 'N/A')}")
+                    
+                    execution_result = {
+                        "success": True,
+                        "wallet_credited": amount,
+                        "wallet_balance": new_balance,
+                        "executed_at": now.isoformat()
+                    }
+                    executed_at = now
+                    final_status = 'APPROVED_EXECUTED'
+                    
+                except Exception as e:
+                    execution_error = f"Wallet credit failed: {str(e)}"
+                    final_status = 'APPROVED_FAILED'
+                    execution_result = {"success": False, "error": execution_error}
+                    executed_at = now
                 
             elif order_type == 'game_load':
                 # IMMEDIATE EXECUTION: Load game right now
@@ -303,22 +311,17 @@ async def _process_approval(
                 executed_at = now
                 
                 if not execution_result.get('success'):
-                    # Execution failed - mark order as execution_failed
-                    await conn.execute("""
-                        UPDATE orders SET 
-                            status = 'execution_failed',
-                            execution_result = $1,
-                            executed_at = $2
-                        WHERE order_id = $3
-                    """, json.dumps(execution_result), executed_at, order_id)
+                    # Execution failed - set APPROVED_FAILED
+                    final_status = 'APPROVED_FAILED'
+                    execution_error = execution_result.get('error', 'Game load execution failed')
                     
-                    logger.error(f"Game load execution failed for order {order_id}: {execution_result.get('error')}")
+                    logger.error(f"Game load execution failed for order {order_id}: {execution_error}")
                     
                     # Emit failure event
                     await emit_event(
                         event_type=EventType.GAME_LOAD_FAILED,
                         title="Game Load Failed",
-                        message=f"Game load execution failed for order {order_id[:8]}...\n\nError: {execution_result.get('error')}\nUser: {user.get('display_name', user['username'])}",
+                        message=f"Game load execution failed for order {order_id[:8]}...\n\nError: {execution_error}\nUser: {user.get('display_name', user['username'])}",
                         reference_id=order_id,
                         reference_type="order",
                         user_id=user['user_id'],
@@ -326,60 +329,85 @@ async def _process_approval(
                         display_name=user.get('display_name'),
                         requires_action=True
                     )
-                    
-                    return ApprovalResult(False, "Approval succeeded but execution failed", execution_result)
+                else:
+                    final_status = 'APPROVED_EXECUTED'
                 
             elif order_type == 'withdrawal':
                 # Withdrawal - deduct from wallet FIRST
-                current_balance = float(user.get('real_balance', 0) or 0)
-                new_balance = current_balance - amount
-                
-                if new_balance < 0:
-                    raise Exception("Insufficient balance for withdrawal")
-                
-                await conn.execute("""
-                    UPDATE users SET 
-                        real_balance = $1,
-                        total_withdrawn = total_withdrawn + $2,
-                        updated_at = NOW()
-                    WHERE user_id = $3
-                """, new_balance, amount, user['user_id'])
-                
-                # Log to ledger
-                await conn.execute("""
-                    INSERT INTO wallet_ledger 
-                    (ledger_id, user_id, transaction_type, amount, balance_before, balance_after,
-                     reference_type, reference_id, description, created_at)
-                    VALUES ($1, $2, 'debit', $3, $4, $5, 'withdrawal', $6, $7, NOW())
-                """, str(uuid.uuid4()), user['user_id'], amount,
-                   current_balance, new_balance, order_id,
-                   f"Withdrawal to {order.get('payment_method', 'N/A')}")
-                
-                # IMMEDIATE EXECUTION: Execute withdrawal
-                logger.info(f"Executing withdrawal for order {order_id}")
-                execution_result = await execute_withdrawal(order, user, conn)
-                executed_at = now
-                
-                if not execution_result.get('success'):
-                    # Rollback not possible here, but mark as failed
-                    await conn.execute("""
-                        UPDATE orders SET 
-                            status = 'execution_failed',
-                            execution_result = $1,
-                            executed_at = $2
-                        WHERE order_id = $3
-                    """, json.dumps(execution_result), executed_at, order_id)
+                try:
+                    current_balance = float(user.get('real_balance', 0) or 0)
+                    new_balance = current_balance - amount
                     
-                    return ApprovalResult(False, "Withdrawal execution failed", execution_result)
+                    if new_balance < 0:
+                        raise Exception("Insufficient balance for withdrawal")
+                    
+                    await conn.execute("""
+                        UPDATE users SET 
+                            real_balance = $1,
+                            total_withdrawn = total_withdrawn + $2,
+                            updated_at = NOW()
+                        WHERE user_id = $3
+                    """, new_balance, amount, user['user_id'])
+                    
+                    # Log to ledger
+                    await conn.execute("""
+                        INSERT INTO wallet_ledger 
+                        (ledger_id, user_id, transaction_type, amount, balance_before, balance_after,
+                         reference_type, reference_id, description, created_at)
+                        VALUES ($1, $2, 'debit', $3, $4, $5, 'withdrawal', $6, $7, NOW())
+                    """, str(uuid.uuid4()), user['user_id'], amount,
+                       current_balance, new_balance, order_id,
+                       f"Withdrawal to {order.get('payment_method', 'N/A')}")
+                    
+                    # IMMEDIATE EXECUTION: Execute withdrawal
+                    logger.info(f"Executing withdrawal for order {order_id}")
+                    execution_result = await execute_withdrawal(order, user, conn)
+                    executed_at = now
+                    
+                    if not execution_result.get('success'):
+                        final_status = 'APPROVED_FAILED'
+                        execution_error = execution_result.get('error', 'Withdrawal execution failed')
+                    else:
+                        final_status = 'APPROVED_EXECUTED'
+                        
+                except Exception as e:
+                    execution_error = f"Withdrawal failed: {str(e)}"
+                    final_status = 'APPROVED_FAILED'
+                    execution_result = {"success": False, "error": execution_error}
+                    executed_at = now
             
-            # Update order with execution results
-            if executed_at:
-                await conn.execute("""
-                    UPDATE orders SET 
-                        executed_at = $1,
-                        execution_result = $2
-                    WHERE order_id = $3
-                """, executed_at, json.dumps(execution_result) if execution_result else None, order_id)
+            # FINAL STATUS UPDATE: Set to APPROVED_EXECUTED or APPROVED_FAILED
+            await conn.execute("""
+                UPDATE orders SET 
+                    status = $1,
+                    approved_by = $2,
+                    approved_by_type = $3,
+                    approved_by_id = $4,
+                    approved_at = $5,
+                    amount = $6,
+                    total_amount = $7,
+                    amount_adjusted = $8,
+                    adjusted_by = $9,
+                    adjusted_at = $10,
+                    executed_at = $11,
+                    execution_result = $12,
+                    execution_error = $13,
+                    updated_at = NOW()
+                WHERE order_id = $14
+            """, final_status, actor_id, actor_type.value, actor_id, now,
+               amount, amount + bonus_amount,
+               amount_adjusted, actor_id if amount_adjusted else None,
+               now if amount_adjusted else None,
+               executed_at, json.dumps(execution_result) if execution_result else None,
+               execution_error, order_id)
+    
+    # Return early if execution failed
+    if final_status == 'APPROVED_FAILED':
+        return ApprovalResult(
+            False,
+            f"Execution failed: {execution_error}",
+            {"order_id": order_id, "status": final_status, "execution_error": execution_error}
+        )
     
     # Emit approval event
     event_type = EventType.ORDER_APPROVED
@@ -390,8 +418,8 @@ async def _process_approval(
     
     await emit_event(
         event_type=event_type,
-        title=f"Order Approved",
-        message=f"Order for @{user.get('username')} approved by {actor_type.value}",
+        title=f"Order Approved & Executed",
+        message=f"Order for @{user.get('username')} approved and executed by {actor_type.value}",
         reference_id=order_id,
         reference_type="order",
         user_id=user['user_id'],
@@ -403,7 +431,8 @@ async def _process_approval(
             "approved_by": actor_id,
             "actor_type": actor_type.value,
             "amount_adjusted": amount_adjusted,
-            "original_amount": order['amount'] if amount_adjusted else None
+            "original_amount": order['amount'] if amount_adjusted else None,
+            "final_status": final_status
         },
         requires_action=False
     )
