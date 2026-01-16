@@ -209,6 +209,30 @@ EVENT_METADATA = {
         "category": "Withdrawals",
         "requires_approval": False
     },
+    EventType.WITHDRAW_EXECUTED: {
+        "label": "Withdrawal Executed",
+        "description": "Withdrawal executed and paid out",
+        "category": "Withdrawals",
+        "requires_approval": False
+    },
+    EventType.WITHDRAW_FAILED: {
+        "label": "Withdrawal Failed",
+        "description": "Withdrawal execution failed",
+        "category": "Withdrawals",
+        "requires_approval": False
+    },
+    EventType.ORDER_EXECUTED: {
+        "label": "Order Executed",
+        "description": "Order approved and executed successfully",
+        "category": "Orders",
+        "requires_approval": False
+    },
+    EventType.ORDER_EXECUTION_FAILED: {
+        "label": "Order Execution Failed",
+        "description": "Order execution failed after approval",
+        "category": "Orders",
+        "requires_approval": False
+    },
     EventType.REFERRAL_JOINED: {
         "label": "Referral Joined",
         "description": "New user joined via referral",
