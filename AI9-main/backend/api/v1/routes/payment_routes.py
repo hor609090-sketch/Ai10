@@ -197,7 +197,8 @@ async def process_order_action(
         )
         
     elif data.action == 'reject':
-        new_status = 'rejected'
+        # CANONICAL STATUS: REJECTED
+        new_status = 'REJECTED'
         
         await execute('''
             UPDATE orders 
@@ -219,7 +220,7 @@ async def process_order_action(
             user_id=order['user_id'],
             username=order['username'],
             amount=order['amount'],
-            extra_data={"reason": data.reason},
+            extra_data={"reason": data.reason, "final_status": "REJECTED"},
             requires_action=False
         )
     else:
