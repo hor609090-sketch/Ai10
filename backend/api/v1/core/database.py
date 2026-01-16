@@ -613,10 +613,25 @@ async def init_api_v1_db():
                 balance_after FLOAT NOT NULL,
                 reference_type VARCHAR(30),
                 reference_id VARCHAR(36),
+                source_type VARCHAR(30) DEFAULT 'external',
+                requires_approval BOOLEAN DEFAULT true,
+                order_id VARCHAR(36),
                 description TEXT,
                 created_at TIMESTAMPTZ DEFAULT NOW()
             )
         ''')
+        
+        # Add missing columns to wallet_ledger (for existing databases)
+        ledger_columns = [
+            ("source_type", "VARCHAR(30) DEFAULT 'external'"),
+            ("requires_approval", "BOOLEAN DEFAULT true"),
+            ("order_id", "VARCHAR(36)"),
+        ]
+        for col_name, col_def in ledger_columns:
+            try:
+                await conn.execute(f'ALTER TABLE wallet_ledger ADD COLUMN IF NOT EXISTS {col_name} {col_def}')
+            except Exception as e:
+                logger.debug(f"Column {col_name} may already exist: {e}")
         
         # ==================== GAME LOAD HISTORY ====================
         await conn.execute('''
