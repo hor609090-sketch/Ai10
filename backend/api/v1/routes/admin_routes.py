@@ -121,10 +121,10 @@ async def get_admin_stats(request: Request, authorization: str = Header(..., ali
     total_perks = (await fetch_one("SELECT COUNT(*) as count FROM referral_perks WHERE is_active = TRUE"))['count']
     
     total_volume = await fetch_one(
-        "SELECT COALESCE(SUM(amount), 0) as total FROM orders WHERE order_type = 'deposit' AND status = 'approved'"
+        "SELECT COALESCE(SUM(amount), 0) as total FROM orders WHERE order_type = 'deposit' AND status = 'APPROVED_EXECUTED'"
     )
     total_bonus = await fetch_one(
-        "SELECT COALESCE(SUM(bonus_amount), 0) as total FROM orders WHERE status = 'approved'"
+        "SELECT COALESCE(SUM(bonus_amount), 0) as total FROM orders WHERE status = 'APPROVED_EXECUTED'"
     )
     pending_orders = (await fetch_one(
         "SELECT COUNT(*) as count FROM orders WHERE status IN ('initiated', 'pending_review', 'awaiting_payment_proof')"

@@ -159,12 +159,12 @@ async def get_platform_trends(
     trend_query = f"""
         SELECT 
             DATE(o.created_at) as date,
-            COALESCE(SUM(o.amount) FILTER (WHERE o.order_type = 'deposit' AND o.status = 'approved'), 0) as deposits,
-            COALESCE(SUM(o.payout_amount) FILTER (WHERE o.order_type = 'withdrawal' AND o.status = 'approved'), 0) as withdrawals_paid,
-            COALESCE(SUM(o.bonus_amount) FILTER (WHERE o.status = 'approved'), 0) as bonus_issued,
-            COALESCE(SUM(o.void_amount) FILTER (WHERE o.status = 'approved'), 0) as bonus_voided,
-            COALESCE(SUM(o.play_credits_added) FILTER (WHERE o.status = 'approved'), 0) as play_credits_added,
-            COUNT(DISTINCT o.user_id) FILTER (WHERE o.status = 'approved') as active_clients
+            COALESCE(SUM(o.amount) FILTER (WHERE o.order_type = 'deposit' AND o.status = 'APPROVED_EXECUTED'), 0) as deposits,
+            COALESCE(SUM(o.payout_amount) FILTER (WHERE o.order_type = 'withdrawal' AND o.status = 'APPROVED_EXECUTED'), 0) as withdrawals_paid,
+            COALESCE(SUM(o.bonus_amount) FILTER (WHERE o.status = 'APPROVED_EXECUTED'), 0) as bonus_issued,
+            COALESCE(SUM(o.void_amount) FILTER (WHERE o.status = 'APPROVED_EXECUTED'), 0) as bonus_voided,
+            COALESCE(SUM(o.play_credits_added) FILTER (WHERE o.status = 'APPROVED_EXECUTED'), 0) as play_credits_added,
+            COUNT(DISTINCT o.user_id) FILTER (WHERE o.status = 'APPROVED_EXECUTED') as active_clients
         FROM orders o
         {segment_join}
         {base_conditions}
@@ -255,8 +255,8 @@ async def get_risk_exposure(
         SELECT 
             g.game_name,
             g.display_name,
-            COALESCE(SUM(o.amount) FILTER (WHERE o.order_type = 'deposit' AND o.status = 'approved'), 0) as total_deposited,
-            COALESCE(SUM(o.payout_amount) FILTER (WHERE o.order_type = 'withdrawal' AND o.status = 'approved'), 0) as total_withdrawn
+            COALESCE(SUM(o.amount) FILTER (WHERE o.order_type = 'deposit' AND o.status = 'APPROVED_EXECUTED'), 0) as total_deposited,
+            COALESCE(SUM(o.payout_amount) FILTER (WHERE o.order_type = 'withdrawal' AND o.status = 'APPROVED_EXECUTED'), 0) as total_withdrawn
         FROM games g
         LEFT JOIN orders o ON g.game_name = o.game_name
         GROUP BY g.game_id, g.game_name, g.display_name
@@ -288,9 +288,9 @@ async def get_risk_exposure(
     # SECTION C: Bonus Risk
     bonus_stats = await fetch_one("""
         SELECT 
-            COALESCE(SUM(bonus_amount) FILTER (WHERE status = 'approved'), 0) as bonus_issued,
-            COALESCE(SUM(bonus_consumed) FILTER (WHERE status = 'approved'), 0) as bonus_converted,
-            COALESCE(SUM(void_amount) FILTER (WHERE status = 'approved'), 0) as bonus_voided
+            COALESCE(SUM(bonus_amount) FILTER (WHERE status = 'APPROVED_EXECUTED'), 0) as bonus_issued,
+            COALESCE(SUM(bonus_consumed) FILTER (WHERE status = 'APPROVED_EXECUTED'), 0) as bonus_converted,
+            COALESCE(SUM(void_amount) FILTER (WHERE status = 'APPROVED_EXECUTED'), 0) as bonus_voided
         FROM orders
     """)
     
@@ -319,10 +319,10 @@ async def get_risk_exposure(
             g.game_name,
             g.display_name,
             COUNT(DISTINCT o.user_id) as active_players,
-            COALESCE(SUM(o.amount) FILTER (WHERE o.order_type = 'deposit' AND o.status = 'approved'), 0) as total_in,
-            COALESCE(SUM(o.payout_amount) FILTER (WHERE o.order_type = 'withdrawal' AND o.status = 'approved'), 0) as total_out,
-            COALESCE(SUM(o.bonus_amount) FILTER (WHERE o.status = 'approved'), 0) as bonus_given,
-            COALESCE(SUM(o.void_amount) FILTER (WHERE o.status = 'approved'), 0) as voided
+            COALESCE(SUM(o.amount) FILTER (WHERE o.order_type = 'deposit' AND o.status = 'APPROVED_EXECUTED'), 0) as total_in,
+            COALESCE(SUM(o.payout_amount) FILTER (WHERE o.order_type = 'withdrawal' AND o.status = 'APPROVED_EXECUTED'), 0) as total_out,
+            COALESCE(SUM(o.bonus_amount) FILTER (WHERE o.status = 'APPROVED_EXECUTED'), 0) as bonus_given,
+            COALESCE(SUM(o.void_amount) FILTER (WHERE o.status = 'APPROVED_EXECUTED'), 0) as voided
         FROM games g
         LEFT JOIN orders o ON g.game_name = o.game_name
         GROUP BY g.game_id, g.game_name, g.display_name
@@ -426,12 +426,12 @@ async def get_client_analytics(
     # Lifetime stats from orders
     lifetime = await fetch_one("""
         SELECT 
-            COALESCE(SUM(amount) FILTER (WHERE order_type = 'deposit' AND status = 'approved'), 0) as lifetime_deposits,
-            COALESCE(SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status = 'approved'), 0) as lifetime_withdrawals,
-            COALESCE(SUM(bonus_amount) FILTER (WHERE status = 'approved'), 0) as lifetime_bonus,
-            COALESCE(SUM(void_amount) FILTER (WHERE status = 'approved'), 0) as lifetime_void,
-            COUNT(*) FILTER (WHERE order_type = 'deposit' AND status = 'approved') as deposit_count,
-            COUNT(*) FILTER (WHERE order_type = 'withdrawal' AND status = 'approved') as withdrawal_count
+            COALESCE(SUM(amount) FILTER (WHERE order_type = 'deposit' AND status = 'APPROVED_EXECUTED'), 0) as lifetime_deposits,
+            COALESCE(SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status = 'APPROVED_EXECUTED'), 0) as lifetime_withdrawals,
+            COALESCE(SUM(bonus_amount) FILTER (WHERE status = 'APPROVED_EXECUTED'), 0) as lifetime_bonus,
+            COALESCE(SUM(void_amount) FILTER (WHERE status = 'APPROVED_EXECUTED'), 0) as lifetime_void,
+            COUNT(*) FILTER (WHERE order_type = 'deposit' AND status = 'APPROVED_EXECUTED') as deposit_count,
+            COUNT(*) FILTER (WHERE order_type = 'withdrawal' AND status = 'APPROVED_EXECUTED') as withdrawal_count
         FROM orders WHERE user_id = $1
     """, user_id)
     
@@ -502,13 +502,13 @@ async def get_game_analytics(
     # Analytics
     analytics = await fetch_one("""
         SELECT 
-            COALESCE(SUM(amount) FILTER (WHERE order_type = 'deposit' AND status = 'approved'), 0) as total_deposits,
-            COALESCE(SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status = 'approved'), 0) as total_withdrawals,
-            COALESCE(SUM(bonus_amount) FILTER (WHERE status = 'approved'), 0) as bonus_issued,
-            COALESCE(SUM(bonus_consumed) FILTER (WHERE status = 'approved'), 0) as bonus_converted,
-            COALESCE(SUM(void_amount) FILTER (WHERE status = 'approved'), 0) as bonus_voided,
-            COUNT(DISTINCT user_id) FILTER (WHERE status = 'approved') as total_players,
-            COUNT(DISTINCT user_id) FILTER (WHERE status = 'approved' AND created_at >= NOW() - INTERVAL '7 days') as active_7d
+            COALESCE(SUM(amount) FILTER (WHERE order_type = 'deposit' AND status = 'APPROVED_EXECUTED'), 0) as total_deposits,
+            COALESCE(SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status = 'APPROVED_EXECUTED'), 0) as total_withdrawals,
+            COALESCE(SUM(bonus_amount) FILTER (WHERE status = 'APPROVED_EXECUTED'), 0) as bonus_issued,
+            COALESCE(SUM(bonus_consumed) FILTER (WHERE status = 'APPROVED_EXECUTED'), 0) as bonus_converted,
+            COALESCE(SUM(void_amount) FILTER (WHERE status = 'APPROVED_EXECUTED'), 0) as bonus_voided,
+            COUNT(DISTINCT user_id) FILTER (WHERE status = 'APPROVED_EXECUTED') as total_players,
+            COUNT(DISTINCT user_id) FILTER (WHERE status = 'APPROVED_EXECUTED' AND created_at >= NOW() - INTERVAL '7 days') as active_7d
         FROM orders WHERE game_name = $1
     """, game_name)
     
@@ -572,7 +572,7 @@ async def get_advanced_metrics(
         SELECT 
             COALESCE(SUM(bonus_amount), 0) as issued,
             COALESCE(SUM(bonus_consumed), 0) as converted
-        FROM orders WHERE status = 'approved' AND created_at >= $1
+        FROM orders WHERE status = 'APPROVED_EXECUTED' AND created_at >= $1
     """, since)
     
     bonus_conversion = (float(bonus_stats['converted'] or 0) / float(bonus_stats['issued'] or 1)) * 100
@@ -582,13 +582,13 @@ async def get_advanced_metrics(
         WITH deposit_times AS (
             SELECT user_id, MIN(approved_at) as first_deposit
             FROM orders 
-            WHERE order_type = 'deposit' AND status = 'approved' AND approved_at >= $1
+            WHERE order_type = 'deposit' AND status = 'APPROVED_EXECUTED' AND approved_at >= $1
             GROUP BY user_id
         ),
         withdrawal_times AS (
             SELECT user_id, MIN(approved_at) as first_withdrawal
             FROM orders 
-            WHERE order_type = 'withdrawal' AND status = 'approved' AND approved_at >= $1
+            WHERE order_type = 'withdrawal' AND status = 'APPROVED_EXECUTED' AND approved_at >= $1
             GROUP BY user_id
         )
         SELECT AVG(EXTRACT(EPOCH FROM (w.first_withdrawal - d.first_deposit)) / 3600) as avg_hours
@@ -601,13 +601,13 @@ async def get_advanced_metrics(
     total_depositors = await fetch_one("""
         SELECT COUNT(DISTINCT user_id) as count
         FROM orders 
-        WHERE order_type = 'deposit' AND status = 'approved' AND created_at >= $1
+        WHERE order_type = 'deposit' AND status = 'APPROVED_EXECUTED' AND created_at >= $1
     """, since)
     
     withdrawers = await fetch_one("""
         SELECT COUNT(DISTINCT user_id) as count
         FROM orders 
-        WHERE order_type = 'withdrawal' AND status = 'approved' AND created_at >= $1
+        WHERE order_type = 'withdrawal' AND status = 'APPROVED_EXECUTED' AND created_at >= $1
     """, since)
     
     never_withdrawn_pct = 100 - (float(withdrawers['count'] or 0) / float(total_depositors['count'] or 1)) * 100
@@ -627,12 +627,12 @@ async def get_advanced_metrics(
         WITH user_totals AS (
             SELECT 
                 user_id,
-                SUM(amount) FILTER (WHERE order_type = 'deposit' AND status = 'approved') as deposited,
-                SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status = 'approved') as withdrawn
+                SUM(amount) FILTER (WHERE order_type = 'deposit' AND status = 'APPROVED_EXECUTED') as deposited,
+                SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status = 'APPROVED_EXECUTED') as withdrawn
             FROM orders
             WHERE created_at >= $1
             GROUP BY user_id
-            HAVING SUM(amount) FILTER (WHERE order_type = 'deposit' AND status = 'approved') > 0
+            HAVING SUM(amount) FILTER (WHERE order_type = 'deposit' AND status = 'APPROVED_EXECUTED') > 0
         )
         SELECT AVG(withdrawn / NULLIF(deposited, 0)) as avg_multiplier
         FROM user_totals

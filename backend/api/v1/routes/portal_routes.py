@@ -136,7 +136,7 @@ async def get_bonus_progress(
     # Get last deposit to calculate required play-through
     last_deposit = await fetch_one("""
         SELECT amount, bonus_amount FROM orders 
-        WHERE user_id = $1 AND order_type = 'deposit' AND status = 'approved'
+        WHERE user_id = $1 AND order_type = 'deposit' AND status = 'APPROVED_EXECUTED'
         ORDER BY approved_at DESC LIMIT 1
     """, user['user_id'])
     
@@ -149,7 +149,7 @@ async def get_bonus_progress(
     total_wagered = await fetch_one("""
         SELECT COALESCE(SUM(amount + COALESCE(bonus_amount, 0)), 0) as total
         FROM orders 
-        WHERE user_id = $1 AND status = 'approved'
+        WHERE user_id = $1 AND status = 'APPROVED_EXECUTED'
     """, user['user_id'])
     
     current_playthrough = float(total_wagered['total'] or 0)
@@ -161,13 +161,13 @@ async def get_bonus_progress(
     # Get bonus breakdown by source
     signup_bonus = await fetch_one("""
         SELECT COALESCE(SUM(bonus_amount), 0) as total
-        FROM orders WHERE user_id = $1 AND status = 'approved'
+        FROM orders WHERE user_id = $1 AND status = 'APPROVED_EXECUTED'
         AND metadata::text LIKE '%signup%'
     """, user['user_id'])
     
     deposit_bonus = await fetch_one("""
         SELECT COALESCE(SUM(bonus_amount), 0) as total
-        FROM orders WHERE user_id = $1 AND order_type = 'deposit' AND status = 'approved'
+        FROM orders WHERE user_id = $1 AND order_type = 'deposit' AND status = 'APPROVED_EXECUTED'
     """, user['user_id'])
     
     # Get promo credits from redemptions
@@ -345,7 +345,7 @@ async def redeem_promo_code(
     # Check eligibility requirements
     if promo.get('min_deposits'):
         user_deposits = await fetch_one(
-            "SELECT COUNT(*) as count FROM orders WHERE user_id = $1 AND order_type = 'deposit' AND status = 'approved'",
+            "SELECT COUNT(*) as count FROM orders WHERE user_id = $1 AND order_type = 'deposit' AND status = 'APPROVED_EXECUTED'",
             user['user_id']
         )
         if user_deposits['count'] < promo['min_deposits']:
@@ -672,7 +672,7 @@ async def get_referral_details(
         SELECT COUNT(DISTINCT u.user_id) as count
         FROM users u
         JOIN orders o ON u.user_id = o.user_id
-        WHERE u.referred_by_user_id = $1 AND o.order_type = 'deposit' AND o.status = 'approved'
+        WHERE u.referred_by_user_id = $1 AND o.order_type = 'deposit' AND o.status = 'APPROVED_EXECUTED'
     """, user['user_id'])
     
     active_refs = active_count['count'] or 0
@@ -700,7 +700,7 @@ async def get_referral_details(
         JOIN orders o ON u.user_id = o.user_id
         WHERE u.referred_by_user_id = $1 
         AND o.order_type = 'deposit' 
-        AND o.status = 'approved'
+        AND o.status = 'APPROVED_EXECUTED'
     """, user['user_id'], current_tier['commission'])
     
     # Find next tier
