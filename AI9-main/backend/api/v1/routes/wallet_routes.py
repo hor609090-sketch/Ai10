@@ -171,11 +171,11 @@ async def create_wallet_load_request(
     except Exception:
         proof_hash = None
     
-    # Check for duplicate proof
+    # Check for duplicate proof - exclude rejected requests (both legacy and canonical statuses)
     if proof_hash:
         duplicate = await fetch_one("""
             SELECT request_id FROM wallet_load_requests 
-            WHERE proof_image_hash = $1 AND status != 'rejected'
+            WHERE proof_image_hash = $1 AND status NOT IN ('rejected', 'REJECTED')
         """, proof_hash)
         if duplicate:
             raise HTTPException(
