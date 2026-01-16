@@ -71,11 +71,12 @@ async def upload_payment_proof(
     
     now = datetime.now(timezone.utc)
     
-    # Update order status to pending_review (NO proof_url stored)
+    # Update order status to PENDING_REVIEW (NO proof_url stored)
+    # CANONICAL STATUS: PENDING_REVIEW (awaiting admin approval)
     await execute('''
         UPDATE orders 
         SET payment_proof_uploaded_at = $1,
-            status = 'pending_review',
+            status = 'PENDING_REVIEW',
             updated_at = NOW()
         WHERE order_id = $2
     ''', now, order_id)

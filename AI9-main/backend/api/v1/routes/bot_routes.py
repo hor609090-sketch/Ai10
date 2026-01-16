@@ -546,12 +546,12 @@ async def upload_payment_proof_bot(
     metadata['proof_uploaded_by'] = 'bot'
     metadata['proof_uploaded_at'] = now.isoformat()
     
-    # Update order
+    # Update order - CANONICAL STATUS: PENDING_REVIEW
     await execute('''
         UPDATE orders 
         SET payment_proof_url = $1, 
             payment_proof_uploaded_at = $2,
-            status = 'pending_review',
+            status = 'PENDING_REVIEW',
             metadata = $3,
             updated_at = NOW()
         WHERE order_id = $4

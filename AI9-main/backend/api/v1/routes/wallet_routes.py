@@ -205,11 +205,12 @@ async def create_wallet_load_request(
     
     # NO PROOF URL STORED - image forwarded to Telegram only
     # Store only hash for duplicate detection
+    # CANONICAL STATUS: PENDING_REVIEW (awaiting admin approval)
     await execute("""
         INSERT INTO wallet_load_requests 
         (request_id, user_id, amount, payment_method, qr_id, 
          proof_image_hash, status, ip_address, device_fingerprint, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, NOW())
+        VALUES ($1, $2, $3, $4, $5, $6, 'PENDING_REVIEW', $7, $8, NOW())
     """, request_id, user['user_id'], data.amount, data.payment_method, 
        qr['qr_id'], proof_hash, client_ip, device_fp)
     
