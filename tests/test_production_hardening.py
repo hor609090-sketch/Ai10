@@ -89,11 +89,12 @@ class TestAdminDashboard:
         data = response.json()
         
         # Verify dashboard structure
-        assert 'money_flow' in data
-        assert 'pending_counts' in data
-        assert 'user_stats' in data
+        assert 'pending_approvals' in data
+        assert 'today' in data
+        assert 'net_profit' in data
+        assert 'system_status' in data
         
-        print(f"✓ Dashboard endpoint returned: money_flow={data['money_flow']}, pending={data['pending_counts']}")
+        print(f"✓ Dashboard endpoint returned: pending={data['pending_approvals']}, today={data['today']}")
     
     def test_pending_approvals_endpoint(self, admin_token):
         """Test /api/v1/admin/approvals/pending returns pending orders"""
