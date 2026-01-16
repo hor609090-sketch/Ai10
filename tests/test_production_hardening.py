@@ -73,12 +73,12 @@ class TestAdminDashboard:
     @pytest.fixture
     def admin_token(self):
         """Get admin token"""
-        response = requests.post(f"{BASE_URL}/api/v1/admin/login", json={
+        response = requests.post(f"{BASE_URL}/api/v1/auth/login", json={
             "username": ADMIN_USERNAME,
             "password": ADMIN_PASSWORD
         })
         if response.status_code == 200:
-            return response.json().get('token')
+            return response.json().get('access_token')
         pytest.skip("Admin login failed")
     
     def test_dashboard_endpoint(self, admin_token):
@@ -125,12 +125,12 @@ class TestApprovalServiceCanonicalStatuses:
     @pytest.fixture
     def admin_token(self):
         """Get admin token"""
-        response = requests.post(f"{BASE_URL}/api/v1/admin/login", json={
+        response = requests.post(f"{BASE_URL}/api/v1/auth/login", json={
             "username": ADMIN_USERNAME,
             "password": ADMIN_PASSWORD
         })
         if response.status_code == 200:
-            return response.json().get('token')
+            return response.json().get('access_token')
         pytest.skip("Admin login failed")
     
     @pytest.fixture
@@ -213,12 +213,12 @@ class TestWalletLoadRequestStatus:
     @pytest.fixture
     def admin_token(self):
         """Get admin token"""
-        response = requests.post(f"{BASE_URL}/api/v1/admin/login", json={
+        response = requests.post(f"{BASE_URL}/api/v1/auth/login", json={
             "username": ADMIN_USERNAME,
             "password": ADMIN_PASSWORD
         })
         if response.status_code == 200:
-            return response.json().get('token')
+            return response.json().get('access_token')
         pytest.skip("Admin login failed")
     
     def test_wallet_load_pending_query(self, admin_token):
@@ -249,12 +249,12 @@ class TestReportsWithCanonicalStatuses:
     @pytest.fixture
     def admin_token(self):
         """Get admin token"""
-        response = requests.post(f"{BASE_URL}/api/v1/admin/login", json={
+        response = requests.post(f"{BASE_URL}/api/v1/auth/login", json={
             "username": ADMIN_USERNAME,
             "password": ADMIN_PASSWORD
         })
         if response.status_code == 200:
-            return response.json().get('token')
+            return response.json().get('access_token')
         pytest.skip("Admin login failed")
     
     def test_balance_flow_report(self, admin_token):
