@@ -88,8 +88,8 @@ async def approve_or_reject_order(
     if not order:
         return ApprovalResult(False, "Order not found")
     
-    # Idempotency check
-    if order['status'] not in ['pending', 'pending_review', 'initiated', 'awaiting_payment_proof']:
+    # Idempotency check - ONLY these statuses can be approved/rejected
+    if order['status'] not in ['pending', 'PENDING_REVIEW', 'initiated', 'awaiting_payment_proof']:
         return ApprovalResult(False, f"Order already {order['status']}", {"already_processed": True})
     
     now = datetime.now(timezone.utc)
