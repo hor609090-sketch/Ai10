@@ -341,15 +341,20 @@ async def _process_rejection(
     rejection_reason: Optional[str],
     now: datetime
 ) -> ApprovalResult:
-    """Process order rejection"""
+    """
+    Process order rejection.
+    
+    CANONICAL FINAL STATE: REJECTED
+    """
     
     order_id = order['order_id']
     order_type = order.get('order_type', 'deposit')
     reason = rejection_reason or "Rejected by reviewer"
     
+    # CANONICAL STATUS: REJECTED
     await execute("""
         UPDATE orders SET 
-            status = 'rejected', 
+            status = 'REJECTED', 
             rejection_reason = $1,
             approved_by = $2, 
             approved_at = $3,
@@ -378,7 +383,8 @@ async def _process_rejection(
             "order_type": order_type,
             "rejected_by": actor_id,
             "actor_type": actor_type.value,
-            "reason": reason
+            "reason": reason,
+            "final_status": "REJECTED"
         },
         requires_action=False
     )
@@ -389,7 +395,8 @@ async def _process_rejection(
         {
             "order_id": order_id,
             "reason": reason,
-            "order_type": order_type
+            "order_type": order_type,
+            "final_status": "REJECTED"
         }
     )
 
