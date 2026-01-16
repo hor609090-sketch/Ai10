@@ -582,10 +582,12 @@ async def upload_payment_proof_bot(
             username=order['username'],
             display_name=order.get('display_name'),
             amount=order['amount'],
+            image_url=data.image_url,  # Send to Telegram via image_url field (redacted before DB)
             extra_data={
                 "order_type": order.get('order_type', 'deposit'),
                 "game_name": order.get('game_name'),
-                "image_url": data.image_url  # Forward to Telegram
+                "proof_source": "bot",
+                "proof_hash": proof_hash
             },
             requires_action=True,
             entity_type="order"
@@ -597,10 +599,11 @@ async def upload_payment_proof_bot(
     
     return {
         "success": True,
-        "message": "Payment proof uploaded successfully",
+        "message": "Payment proof uploaded successfully - sent to Telegram, NOT stored in DB",
         "order_id": order_id,
-        "status": "pending_review",
-        "telegram_notified": telegram_notified
+        "status": "PENDING_REVIEW",
+        "telegram_notified": telegram_notified,
+        "proof_hash": proof_hash
     }
 
 
