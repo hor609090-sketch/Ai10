@@ -513,6 +513,7 @@ async def _process_approval(
             "amount": amount,
             "amount_adjusted": amount_adjusted,
             "order_type": order_type,
+            "status": final_status,
             "executed": executed_at is not None,
             "execution_result": execution_result
         }
@@ -535,13 +536,15 @@ async def _process_rejection(
     
     await execute("""
         UPDATE orders SET 
-            status = 'rejected', 
+            status = 'REJECTED', 
             rejection_reason = $1,
-            approved_by = $2, 
-            approved_at = $3,
+            approved_by = $2,
+            approved_by_type = $3,
+            approved_by_id = $4,
+            approved_at = $5,
             updated_at = NOW()
-        WHERE order_id = $4
-    """, reason, actor_id, now, order_id)
+        WHERE order_id = $6
+    """, reason, actor_id, actor_type.value, actor_id, now, order_id)
     
     # Emit rejection event
     event_type = EventType.ORDER_REJECTED
