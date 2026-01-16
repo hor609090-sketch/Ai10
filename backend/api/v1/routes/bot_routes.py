@@ -539,28 +539,33 @@ async def upload_payment_proof_bot(
     
     now = datetime.now(timezone.utc)
     
+    # Calculate proof hash for deduplication
+    import hashlib
+    proof_hash = hashlib.sha256(data.image_url.encode()).hexdigest()[:32] if data.image_url else None
+    
     # Update metadata with conversation ID if provided
     metadata = json.loads(order['metadata']) if order.get('metadata') else {}
     if data.conversation_id:
         metadata['chatwoot_conversation_id'] = data.conversation_id
     metadata['proof_uploaded_by'] = 'bot'
     metadata['proof_uploaded_at'] = now.isoformat()
+    metadata['proof_hash'] = proof_hash
+    metadata['proof_source'] = 'bot'
     
-    # Update order
+    # Update order - NO proof URL stored, only metadata
     await execute('''
         UPDATE orders 
-        SET payment_proof_url = $1, 
-            payment_proof_uploaded_at = $2,
-            status = 'pending_review',
-            metadata = $3,
+        SET payment_proof_uploaded_at = $1,
+            status = 'PENDING_REVIEW',
+            metadata = $2,
             updated_at = NOW()
-        WHERE order_id = $4
-    ''', data.image_url, now, json.dumps(metadata), order_id)
+        WHERE order_id = $3
+    ''', now, json.dumps(metadata), order_id)
     
-    # Log audit
+    # Log audit (NO image URL stored)
     await log_audit(
         order['user_id'], order['username'], "bot.payment_proof_uploaded", "order", order_id,
-        {"image_url": data.image_url[:100], "conversation_id": data.conversation_id}
+        {"proof_hash": proof_hash, "proof_source": "bot", "conversation_id": data.conversation_id}
     )
     
     # Trigger Telegram notification via NotificationRouter (multi-bot system)
