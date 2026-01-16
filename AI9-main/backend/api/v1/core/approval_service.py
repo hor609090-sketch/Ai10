@@ -538,9 +538,10 @@ async def approve_or_reject_wallet_load(
     else:  # reject
         reason = rejection_reason or "Rejected by reviewer"
         
+        # CANONICAL STATUS: REJECTED
         await execute("""
             UPDATE wallet_load_requests 
-            SET status = 'rejected', 
+            SET status = 'REJECTED', 
                 rejection_reason = $1,
                 reviewed_by = $2, 
                 reviewed_at = $3,
@@ -561,12 +562,14 @@ async def approve_or_reject_wallet_load(
             extra_data={
                 "rejected_by": actor_id,
                 "actor_type": actor_type.value,
-                "reason": reason
+                "reason": reason,
+                "final_status": "REJECTED"
             },
             requires_action=False
         )
         
         return ApprovalResult(True, "Wallet load rejected", {
             "request_id": request_id,
-            "reason": reason
+            "reason": reason,
+            "final_status": "REJECTED"
         })
