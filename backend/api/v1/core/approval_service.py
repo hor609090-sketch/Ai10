@@ -251,30 +251,17 @@ async def _process_approval(
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.transaction():
-            # Update order status
-            update_query = """
-                UPDATE orders SET 
-                    status = 'approved', 
-                    approved_by = $1, 
-                    approved_at = $2,
-                    amount = $3,
-                    total_amount = $4,
-                    amount_adjusted = $5,
-                    adjusted_by = $6,
-                    adjusted_at = $7,
-                    updated_at = NOW()
-                WHERE order_id = $8
-            """
-            await conn.execute(
-                update_query,
-                actor_id, now, amount, amount + bonus_amount,
-                amount_adjusted, actor_id if amount_adjusted else None,
-                now if amount_adjusted else None, order_id
-            )
+            # Increment execution attempts
+            await conn.execute("""
+                UPDATE orders SET execution_attempts = execution_attempts + 1
+                WHERE order_id = $1
+            """, order_id)
             
             # Apply side effects based on order type
             execution_result = None
             executed_at = None
+            final_status = 'APPROVED_EXECUTED'  # Default, may change to APPROVED_FAILED
+            execution_error = None
             
             if order_type in ['wallet_topup', 'deposit']:
                 # Credit wallet
