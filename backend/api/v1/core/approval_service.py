@@ -381,42 +381,53 @@ async def _process_approval(
                     final_status = 'APPROVED_EXECUTED'
                 
             elif order_type == 'withdrawal':
-                # Withdrawal - deduct from wallet FIRST
+                # Withdrawal - CHECK PAYOUT API FIRST, then deduct wallet
                 try:
-                    current_balance = float(user.get('real_balance', 0) or 0)
-                    new_balance = current_balance - amount
+                    # MONEY SAFETY: Check payout API availability BEFORE wallet deduction
+                    logger.info(f"Checking payout API availability for order {order_id}")
                     
-                    if new_balance < 0:
-                        raise Exception("Insufficient balance for withdrawal")
+                    # Call execute_withdrawal with current balance (no deduction yet)
+                    temp_execution_result = await execute_withdrawal(order, user, conn)
                     
-                    await conn.execute("""
-                        UPDATE users SET 
-                            real_balance = $1,
-                            total_withdrawn = total_withdrawn + $2,
-                            updated_at = NOW()
-                        WHERE user_id = $3
-                    """, new_balance, amount, user['user_id'])
-                    
-                    # Log to ledger
-                    await conn.execute("""
-                        INSERT INTO wallet_ledger 
-                        (ledger_id, user_id, transaction_type, amount, balance_before, balance_after,
-                         reference_type, reference_id, description, created_at)
-                        VALUES ($1, $2, 'debit', $3, $4, $5, 'withdrawal', $6, $7, NOW())
-                    """, str(uuid.uuid4()), user['user_id'], amount,
-                       current_balance, new_balance, order_id,
-                       f"Withdrawal to {order.get('payment_method', 'N/A')}")
-                    
-                    # IMMEDIATE EXECUTION: Execute withdrawal
-                    logger.info(f"Executing withdrawal for order {order_id}")
-                    execution_result = await execute_withdrawal(order, user, conn)
-                    executed_at = now
-                    
-                    if not execution_result.get('success'):
+                    if not temp_execution_result.get('success'):
+                        # Payout API unavailable - DO NOT deduct wallet
                         final_status = 'APPROVED_FAILED'
-                        execution_error = execution_result.get('error', 'Withdrawal execution failed')
+                        execution_error = temp_execution_result.get('error', 'Payout API unavailable')
+                        execution_result = temp_execution_result
+                        executed_at = now
+                        
+                        logger.error(f"Withdrawal API unavailable, wallet NOT debited: {execution_error}")
                     else:
+                        # Payout API available and successful - NOW deduct wallet
+                        current_balance = float(user.get('real_balance', 0) or 0)
+                        new_balance = current_balance - amount
+                        
+                        if new_balance < 0:
+                            raise Exception("Insufficient balance for withdrawal")
+                        
+                        await conn.execute("""
+                            UPDATE users SET 
+                                real_balance = $1,
+                                total_withdrawn = total_withdrawn + $2,
+                                updated_at = NOW()
+                            WHERE user_id = $3
+                        """, new_balance, amount, user['user_id'])
+                        
+                        # Log to ledger
+                        await conn.execute("""
+                            INSERT INTO wallet_ledger 
+                            (ledger_id, user_id, transaction_type, amount, balance_before, balance_after,
+                             reference_type, reference_id, description, created_at)
+                            VALUES ($1, $2, 'debit', $3, $4, $5, 'withdrawal', $6, $7, NOW())
+                        """, str(uuid.uuid4()), user['user_id'], amount,
+                           current_balance, new_balance, order_id,
+                           f"Withdrawal to {order.get('payment_method', 'N/A')}")
+                        
                         final_status = 'APPROVED_EXECUTED'
+                        execution_result = temp_execution_result
+                        executed_at = now
+                        
+                        logger.info(f"Withdrawal executed successfully, wallet debited")
                         
                 except Exception as e:
                     execution_error = f"Withdrawal failed: {str(e)}"
