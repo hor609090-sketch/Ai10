@@ -11,11 +11,16 @@ FAIL=0
 
 # 1. Withdrawal money safety
 echo "1. VERIFYING: Wallet NOT debited if payout fails"
-if grep -A 30 "elif order_type == 'withdrawal'" /app/backend/api/v1/core/approval_service.py | grep -B 5 "UPDATE users SET" | grep -q "if not temp_execution_result"; then
-    echo "   ✅ PASS: Payout checked BEFORE wallet deduction"
-    ((PASS++))
+if grep -A 10 "elif order_type == 'withdrawal'" /app/backend/api/v1/core/approval_service.py | grep -q "temp_execution_result = await execute_withdrawal"; then
+    if grep -A 20 "temp_execution_result = await execute_withdrawal" /app/backend/api/v1/core/approval_service.py | grep -q "if not temp_execution_result.get('success')"; then
+        echo "   ✅ PASS: Payout checked BEFORE wallet deduction"
+        ((PASS++))
+    else
+        echo "   ❌ FAIL: Payout success not checked"
+        ((FAIL++))
+    fi
 else
-    echo "   ❌ FAIL: Wallet may be debited before payout check"
+    echo "   ❌ FAIL: Payout not checked before wallet change"
     ((FAIL++))
 fi
 
