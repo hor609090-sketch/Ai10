@@ -22,9 +22,10 @@ settings = get_api_settings()
 # ==================== MODELS ====================
 
 class GameLoadRequest(BaseModel):
-    """Game load request - ONLY from wallet"""
+    """Game load request - ONLY from wallet (INTERNAL TRANSFER)"""
     game_id: str = Field(..., description="Game ID to load")
     amount: float = Field(..., gt=0, description="Amount to load from wallet")
+    confirmed: bool = Field(default=False, description="User confirmation (required if auto_game_load=false)")
 
 
 class GameLoadResponse(BaseModel):
