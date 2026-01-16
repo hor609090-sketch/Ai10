@@ -150,7 +150,8 @@ async def process_order_action(
     now = datetime.now(timezone.utc)
     
     if data.action == 'approve':
-        new_status = 'approved'
+        # CANONICAL STATUS: APPROVED_EXECUTED
+        new_status = 'APPROVED_EXECUTED'
         
         # Update user balances based on order type
         if order['order_type'] == 'deposit':
@@ -174,25 +175,28 @@ async def process_order_action(
         
         await execute('''
             UPDATE orders 
-            SET status = $1, approved_by = $2, approved_at = $3, updated_at = NOW()
-            WHERE order_id = $4
-        ''', new_status, auth.user_id, now, order_id)
+            SET status = $1, approved_by = $2, approved_at = $3, executed_at = $4, 
+                execution_result = 'Executed via admin UI', updated_at = NOW()
+            WHERE order_id = $5
+        ''', new_status, auth.user_id, now, now, order_id)
         
         await log_audit(auth.user_id, auth.username, "order.approved", "order", order_id, {
             "amount": order['amount'],
-            "type": order['order_type']
+            "type": order['order_type'],
+            "final_status": "APPROVED_EXECUTED"
         })
         
         # Emit ORDER_APPROVED notification
         await emit_event(
             event_type=EventType.ORDER_APPROVED,
-            title="✅ Order Approved",
+            title="✅ Order Approved & Executed",
             message=f"Order for @{order['username']} approved\nAmount: ₱{order['amount']:,.2f}",
             reference_id=order_id,
             reference_type="order",
             user_id=order['user_id'],
             username=order['username'],
             amount=order['amount'],
+            extra_data={"final_status": "APPROVED_EXECUTED"},
             requires_action=False
         )
         
