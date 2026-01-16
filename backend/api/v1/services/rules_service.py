@@ -117,7 +117,7 @@ async def get_last_deposit(user_id: str, game_name: str) -> Optional[Dict]:
     """Get the user's last approved deposit for a specific game"""
     return await fetch_one('''
         SELECT * FROM orders 
-        WHERE user_id = $1 AND game_name = $2 AND order_type = 'deposit' AND status = 'approved'
+        WHERE user_id = $1 AND game_name = $2 AND order_type = 'deposit' AND status = 'APPROVED_EXECUTED'
         ORDER BY approved_at DESC LIMIT 1
     ''', user_id, game_name.lower())
 
@@ -502,7 +502,7 @@ async def check_first_game_deposit(user_id: str, game_name: str) -> bool:
     """Check if this is the user's first deposit for this specific game"""
     existing = await fetch_one('''
         SELECT order_id FROM orders 
-        WHERE user_id = $1 AND game_name = $2 AND order_type = 'deposit' AND status = 'approved'
+        WHERE user_id = $1 AND game_name = $2 AND order_type = 'deposit' AND status = 'APPROVED_EXECUTED'
         LIMIT 1
     ''', user_id, game_name.lower())
     return existing is None
