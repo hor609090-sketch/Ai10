@@ -324,6 +324,9 @@ async def init_api_v1_db():
                 rejection_reason TEXT,
                 approved_by VARCHAR(36),
                 approved_at TIMESTAMPTZ,
+                -- Approval tracking (actor identification)
+                approved_by_type VARCHAR(20),
+                approved_by_id VARCHAR(100),
                 -- Amount adjustment tracking
                 amount_adjusted BOOLEAN DEFAULT FALSE,
                 adjusted_by VARCHAR(100),
@@ -331,6 +334,8 @@ async def init_api_v1_db():
                 -- Execution tracking (IMMEDIATE on approval)
                 executed_at TIMESTAMPTZ,
                 execution_result JSONB,
+                execution_error TEXT,
+                execution_attempts INTEGER DEFAULT 0,
                 idempotency_key VARCHAR(100) UNIQUE,
                 metadata JSONB DEFAULT '{}',
                 created_at TIMESTAMPTZ DEFAULT NOW(),
