@@ -118,20 +118,20 @@ async def get_dashboard(request: Request, authorization: str = Header(...)):
         FROM orders
     """)
     
-    # Today's flow
+    # Today's flow - handle both legacy 'approved' and canonical 'APPROVED_EXECUTED' statuses
     today_flow = await fetch_one("""
         SELECT 
-            COALESCE(SUM(amount) FILTER (WHERE order_type = 'deposit' AND status = 'approved' AND approved_at >= $1), 0) as deposits_in,
-            COALESCE(SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status = 'approved' AND approved_at >= $1), 0) as withdrawals_out,
-            COALESCE(SUM(void_amount) FILTER (WHERE status = 'approved' AND approved_at >= $1), 0) as voided_today
+            COALESCE(SUM(amount) FILTER (WHERE order_type = 'deposit' AND status IN ('approved', 'APPROVED_EXECUTED') AND approved_at >= $1), 0) as deposits_in,
+            COALESCE(SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status IN ('approved', 'APPROVED_EXECUTED') AND approved_at >= $1), 0) as withdrawals_out,
+            COALESCE(SUM(void_amount) FILTER (WHERE status IN ('approved', 'APPROVED_EXECUTED') AND approved_at >= $1), 0) as voided_today
         FROM orders
     """, today_start)
     
-    # Total profit calculation
+    # Total profit calculation - handle both legacy and canonical statuses
     profit = await fetch_one("""
         SELECT 
-            COALESCE(SUM(amount) FILTER (WHERE order_type = 'deposit' AND status = 'approved'), 0) -
-            COALESCE(SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status = 'approved'), 0) as net_profit
+            COALESCE(SUM(amount) FILTER (WHERE order_type = 'deposit' AND status IN ('approved', 'APPROVED_EXECUTED')), 0) -
+            COALESCE(SUM(payout_amount) FILTER (WHERE order_type = 'withdrawal' AND status IN ('approved', 'APPROVED_EXECUTED')), 0) as net_profit
         FROM orders
     """)
     
