@@ -109,8 +109,8 @@ async def get_bot_payment_methods(
         ]
     }
 
-def verify_bot_token(authorization: str) -> bool:
-    """Verify system bot token"""
+def verify_bot_token_sync(authorization: str) -> bool:
+    """Verify system bot token (sync version for Authorization header)"""
     if not authorization:
         return False
     
@@ -127,7 +127,7 @@ def verify_bot_token(authorization: str) -> bool:
 
 async def require_bot_auth(authorization: str):
     """Require valid bot authentication"""
-    if not verify_bot_token(authorization):
+    if not verify_bot_token_sync(authorization):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"message": "Invalid bot credentials", "error_code": "E1001"}
