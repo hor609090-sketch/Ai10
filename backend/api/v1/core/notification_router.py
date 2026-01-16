@@ -585,6 +585,45 @@ class NotificationRouter:
         return "\n".join(lines)
     
     @staticmethod
+    def _redact_sensitive_data(payload: Dict) -> Dict:
+        """
+        Redact sensitive data from payload before DB storage
+        
+        CRITICAL: Remove ALL image data:
+        - base64 images
+        - image URLs
+        - proof_image fields
+        - Any binary/large data
+        """
+        redacted = payload.copy()
+        
+        # Remove image fields
+        if 'image_url' in redacted:
+            redacted['image_url'] = '<REDACTED>'
+        
+        if 'extra_data' in redacted and isinstance(redacted['extra_data'], dict):
+            extra = redacted['extra_data'].copy()
+            
+            # List of fields to redact
+            sensitive_fields = [
+                'proof_image', 'payment_proof', 'image_data', 
+                'base64_image', 'image_url', 'proof_url',
+                'proof_data', 'screenshot', 'attachment'
+            ]
+            
+            for field in sensitive_fields:
+                if field in extra:
+                    # Store metadata only
+                    if isinstance(extra[field], str) and len(extra[field]) > 100:
+                        extra[field] = f'<REDACTED_LENGTH_{len(extra[field])}>'
+                    else:
+                        extra[field] = '<REDACTED>'
+            
+            redacted['extra_data'] = extra
+        
+        return redacted
+    
+    @staticmethod
     async def _log_notification(
         log_id: str,
         event_type: str,
@@ -594,14 +633,22 @@ class NotificationRouter:
         failed: List[str],
         details: List[Dict]
     ):
-        """Log notification to database"""
+        """
+        Log notification to database
+        
+        CRITICAL: Payload is REDACTED before storage.
+        NO image data, base64, or large binary data stored.
+        """
         status = "success" if not failed else ("partial" if success else "failed")
+        
+        # REDACT sensitive data before storing
+        redacted_payload = NotificationRouter._redact_sensitive_data(payload)
         
         await execute("""
             INSERT INTO notification_logs 
             (log_id, event_type, payload, sent_to_bot_ids, success_bot_ids, failed_bot_ids, status, error_details, created_at)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-        """, log_id, event_type, json.dumps(payload), sent_to, success, failed, status, json.dumps(details))
+        """, log_id, event_type, json.dumps(redacted_payload), sent_to, success, failed, status, json.dumps(details))
     
     @staticmethod
     async def get_all_events() -> List[Dict]:
