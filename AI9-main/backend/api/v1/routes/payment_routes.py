@@ -144,7 +144,9 @@ async def process_order_action(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    if order['status'] not in ['pending_review', 'awaiting_payment_proof', 'initiated']:
+    # Accept both legacy and canonical pending statuses
+    valid_pending_statuses = ['pending_review', 'PENDING_REVIEW', 'awaiting_payment_proof', 'initiated', 'pending']
+    if order['status'] not in valid_pending_statuses:
         raise HTTPException(status_code=400, detail=f"Cannot process order in '{order['status']}' status")
     
     now = datetime.now(timezone.utc)
