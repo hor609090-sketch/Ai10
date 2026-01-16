@@ -115,15 +115,56 @@ async def load_game_from_wallet(
 ):
     """
     POST /api/v1/games/load
-    Load a game ONLY from wallet balance
+    Load a game ONLY from wallet balance (INTERNAL TRANSFER - NO APPROVAL)
     
-    STRICT RULE: Games can ONLY be loaded from wallet balance.
-    Direct deposits, referral earnings, and bonuses must first enter wallet.
+    BUSINESS RULES:
+    - INTERNAL transfer: wallet → game (instant, no order, no approval)
+    - User must be authenticated CLIENT (not bot/Chatwoot)
+    - Respects auto_game_load toggle:
+      - If auto_game_load=false: requires confirmed=true
+      - If auto_game_load=true: executes immediately
+    
+    SAFETY GUARDS:
+    - Only client sessions allowed (reject bot/API tokens)
+    - No order created
+    - No approval_service call
+    - Ledger source_type = "internal_transfer"
     """
     await check_rate_limiting(request)
     
     client_token = authorization.replace("Bearer ", "") if authorization else None
     user = await get_game_user(request, x_portal_token, client_token)
+    
+    # ==================== SAFETY GUARD: CLIENT ONLY ====================
+    # Reject bot tokens, Chatwoot tokens, or any non-client authentication
+    if not client_token and not x_portal_token:
+        raise HTTPException(
+            status_code=403,
+            detail="Internal game loads require authenticated client session"
+        )
+    
+    # Check if this is a bot/API call (bot calls typically have specific headers)
+    user_agent = request.headers.get("user-agent", "").lower()
+    if "bot" in user_agent or "chatwoot" in user_agent:
+        raise HTTPException(
+            status_code=403,
+            detail="Internal game loads not allowed from bot/Chatwoot sessions. Use order creation API instead."
+        )
+    
+    # ==================== AUTO-LOAD TOGGLE CHECK ====================
+    auto_game_load = user.get('auto_game_load', False)
+    
+    if not auto_game_load and not data.confirmed:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error_code": "CONFIRMATION_REQUIRED",
+                "message": "Auto-load is disabled. Please confirm this action.",
+                "requires_confirmation": True,
+                "amount": data.amount,
+                "hint": "Enable auto-load in settings to skip confirmations"
+            }
+        )
     
     # Get game details
     game = await fetch_one("""
@@ -169,7 +210,7 @@ async def load_game_from_wallet(
     if user.get('deposit_locked'):
         raise HTTPException(status_code=403, detail="Your account is restricted from loading games")
     
-    # Process game load
+    # Process game load (INSTANT - NO APPROVAL)
     load_id = str(uuid.uuid4())
     new_balance = wallet_balance - data.amount
     client_ip = request.client.host if request.client else None
@@ -200,35 +241,38 @@ async def load_game_from_wallet(
             """, load_id, user['user_id'], game['game_id'], game['game_name'],
                data.amount, wallet_balance, new_balance, json.dumps(game_credentials), client_ip)
             
-            # Log to immutable wallet ledger
+            # Log to immutable wallet ledger (INTERNAL TRANSFER - NO APPROVAL)
             await conn.execute("""
                 INSERT INTO wallet_ledger 
                 (ledger_id, user_id, transaction_type, amount, balance_before, balance_after,
-                 reference_type, reference_id, description, created_at)
-                VALUES ($1, $2, 'debit', $3, $4, $5, 'game_load', $6, $7, NOW())
+                 reference_type, reference_id, source_type, requires_approval, description, created_at)
+                VALUES ($1, $2, 'debit', $3, $4, $5, 'game_load', $6, 'internal_transfer', false, $7, NOW())
             """, str(uuid.uuid4()), user['user_id'], data.amount,
-               wallet_balance, new_balance, load_id, 
-               f"Game load: {game['display_name']}")
+               wallet_balance, new_balance, load_id,
+               f"Internal game load: {game['display_name']} (instant, no approval)")
             
             # Audit log
             await conn.execute("""
                 INSERT INTO audit_logs 
                 (log_id, user_id, username, action, resource_type, resource_id, details, ip_address, created_at)
-                VALUES ($1, $2, $3, 'game.loaded', 'game_load', $4, $5, $6, NOW())
+                VALUES ($1, $2, $3, 'game.loaded_internal', 'game_load', $4, $5, $6, NOW())
             """, str(uuid.uuid4()), user['user_id'], user['username'], load_id,
                json.dumps({
                    "game": game['game_name'],
                    "amount": data.amount,
                    "balance_before": wallet_balance,
-                   "balance_after": new_balance
+                   "balance_after": new_balance,
+                   "source_type": "internal_transfer",
+                   "auto_game_load": auto_game_load,
+                   "confirmed": data.confirmed
                }), client_ip)
     
     # Emit game load notification
     from ..core.notification_router import emit_event, EventType
     await emit_event(
         event_type=EventType.GAME_LOAD_SUCCESS,
-        title="Game Load Successful",
-        message=f"Client {user['display_name']} loaded ₱{data.amount:,.2f} to {game['display_name']}.\n\nRemaining wallet balance: ₱{new_balance:,.2f}",
+        title="Game Load Successful (Internal)",
+        message=f"Client {user['display_name']} loaded ₱{data.amount:,.2f} to {game['display_name']}.\n\nRemaining wallet balance: ₱{new_balance:,.2f}\n\nSource: Internal wallet transfer (instant)",
         reference_id=load_id,
         reference_type="game_load",
         user_id=user['user_id'],
@@ -238,7 +282,9 @@ async def load_game_from_wallet(
         extra_data={
             "game_name": game['game_name'],
             "game_display_name": game['display_name'],
-            "wallet_balance_remaining": new_balance
+            "wallet_balance_remaining": new_balance,
+            "source_type": "internal_transfer",
+            "requires_approval": False
         },
         requires_action=False
     )
@@ -250,6 +296,8 @@ async def load_game_from_wallet(
         "amount_loaded": data.amount,
         "wallet_balance_remaining": new_balance,
         "game_credentials": game_credentials,
+        "source_type": "internal_transfer",
+        "requires_approval": False,
         "game": {
             "game_id": game['game_id'],
             "game_name": game['game_name'],
