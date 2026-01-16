@@ -47,19 +47,19 @@ class TestAdminAuthentication:
     
     def test_admin_login_success(self):
         """Test admin login with correct credentials"""
-        response = requests.post(f"{BASE_URL}/api/v1/admin/login", json={
+        response = requests.post(f"{BASE_URL}/api/v1/auth/login", json={
             "username": ADMIN_USERNAME,
             "password": ADMIN_PASSWORD
         })
         assert response.status_code == 200
         data = response.json()
-        assert 'token' in data
+        assert 'access_token' in data
         print(f"✓ Admin login successful, token received")
-        return data['token']
+        return data['access_token']
     
     def test_admin_login_wrong_password(self):
         """Test admin login with wrong password returns 401"""
-        response = requests.post(f"{BASE_URL}/api/v1/admin/login", json={
+        response = requests.post(f"{BASE_URL}/api/v1/auth/login", json={
             "username": ADMIN_USERNAME,
             "password": "wrongpassword"
         })
