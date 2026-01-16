@@ -40,10 +40,10 @@ const AdminApprovals = () => {
     setLoading(true);
     try {
       const [depositsRes, withdrawalsRes] = await Promise.all([
-        fetch(`${API}/api/v1/admin/approvals/pending?order_type=deposit`, {
+        fetch(`${API_BASE}/api/v1/admin/approvals/pending?order_type=deposit`, {
           headers: { Authorization: `Bearer ${token}` }
         }),
-        fetch(`${API}/api/v1/admin/approvals/pending?order_type=withdrawal`, {
+        fetch(`${API_BASE}/api/v1/admin/approvals/pending?order_type=withdrawal`, {
           headers: { Authorization: `Bearer ${token}` }
         })
       ]);
@@ -71,7 +71,7 @@ const AdminApprovals = () => {
 
     setProcessing(true);
     try {
-      const res = await fetch(`${API}/api/v1/admin/approvals/${orderId}/action`, {
+      const res = await fetch(`${API_BASE}/api/v1/admin/approvals/${orderId}/action`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
