@@ -170,39 +170,6 @@ async def process_order_action(
         "action": data.action,
         "data": result.data
     }
-        
-        await execute('''
-            UPDATE orders 
-            SET status = $1, rejection_reason = $2, approved_by = $3, approved_at = $4, updated_at = NOW()
-            WHERE order_id = $5
-        ''', new_status, data.reason or 'Rejected by admin', auth.user_id, now, order_id)
-        
-        await log_audit(auth.user_id, auth.username, "order.rejected", "order", order_id, {
-            "reason": data.reason
-        })
-        
-        # Emit ORDER_REJECTED notification
-        await emit_event(
-            event_type=EventType.ORDER_REJECTED,
-            title="❌ Order Rejected",
-            message=f"Order for @{order['username']} rejected\nReason: {data.reason or 'Admin rejection'}",
-            reference_id=order_id,
-            reference_type="order",
-            user_id=order['user_id'],
-            username=order['username'],
-            amount=order['amount'],
-            extra_data={"reason": data.reason},
-            requires_action=False
-        )
-    else:
-        raise HTTPException(status_code=400, detail="Invalid action. Use 'approve' or 'reject'")
-    
-    return {
-        "success": True,
-        "message": f"Order {new_status}",
-        "order_id": order_id,
-        "status": new_status
-    }
 
 
 # ==================== HELPER ====================
