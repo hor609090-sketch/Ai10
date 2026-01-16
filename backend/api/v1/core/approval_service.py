@@ -702,7 +702,7 @@ async def approve_or_reject_wallet_load(
                 
                 await conn.execute("""
                     UPDATE wallet_load_requests 
-                    SET status = 'approved', 
+                    SET status = 'APPROVED_EXECUTED', 
                         amount = $1,
                         reviewed_by = $2, 
                         reviewed_at = $3, 
