@@ -584,8 +584,8 @@ async def get_client_detail(
     
     # Build response matching frontend expectations
     # Calculate financial summary
-    deposits_in = sum(float(o.get('amount', 0)) for o in orders if o.get('order_type') == 'deposit' and o.get('status') == 'approved')
-    withdrawals_out = sum(float(o.get('payout_amount', 0) or 0) for o in orders if o.get('order_type') == 'withdrawal' and o.get('status') == 'approved')
+    deposits_in = sum(float(o.get('amount', 0)) for o in orders if o.get('order_type') == 'deposit' and o.get('status') == 'APPROVED_EXECUTED')
+    withdrawals_out = sum(float(o.get('payout_amount', 0) or 0) for o in orders if o.get('order_type') == 'withdrawal' and o.get('status') == 'APPROVED_EXECUTED')
     
     return {
         "client": {
