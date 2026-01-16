@@ -454,36 +454,62 @@ async def approve_or_reject_wallet_load(
         current_balance = float(load_request.get('real_balance', 0) or 0)
         new_balance = current_balance + amount
         
-        pool = await get_pool()
-        async with pool.acquire() as conn:
-            async with conn.transaction():
-                await conn.execute("""
-                    UPDATE users SET real_balance = $1, updated_at = NOW()
-                    WHERE user_id = $2
-                """, new_balance, load_request['user_id'])
-                
-                await conn.execute("""
-                    UPDATE wallet_load_requests 
-                    SET status = 'approved', 
-                        amount = $1,
-                        reviewed_by = $2, 
-                        reviewed_at = $3, 
-                        updated_at = NOW()
-                    WHERE request_id = $4
-                """, amount, actor_id, now, request_id)
-                
-                await conn.execute("""
-                    INSERT INTO wallet_ledger 
-                    (ledger_id, user_id, transaction_type, amount, balance_before, balance_after,
-                     reference_type, reference_id, description, created_at)
-                    VALUES ($1, $2, 'credit', $3, $4, $5, 'wallet_load', $6, $7, NOW())
-                """, str(uuid.uuid4()), load_request['user_id'], amount,
-                   current_balance, new_balance, request_id,
-                   f"Wallet load via {load_request['payment_method']}")
+        execution_success = False
+        final_status = 'APPROVED_FAILED'
+        
+        try:
+            pool = await get_pool()
+            async with pool.acquire() as conn:
+                async with conn.transaction():
+                    await conn.execute("""
+                        UPDATE users SET real_balance = $1, updated_at = NOW()
+                        WHERE user_id = $2
+                    """, new_balance, load_request['user_id'])
+                    
+                    # CANONICAL STATUS: APPROVED_EXECUTED
+                    await conn.execute("""
+                        UPDATE wallet_load_requests 
+                        SET status = 'APPROVED_EXECUTED', 
+                            amount = $1,
+                            reviewed_by = $2, 
+                            reviewed_at = $3, 
+                            updated_at = NOW()
+                        WHERE request_id = $4
+                    """, amount, actor_id, now, request_id)
+                    
+                    await conn.execute("""
+                        INSERT INTO wallet_ledger 
+                        (ledger_id, user_id, transaction_type, amount, balance_before, balance_after,
+                         reference_type, reference_id, description, created_at)
+                        VALUES ($1, $2, 'credit', $3, $4, $5, 'wallet_load', $6, $7, NOW())
+                    """, str(uuid.uuid4()), load_request['user_id'], amount,
+                       current_balance, new_balance, request_id,
+                       f"Wallet load via {load_request['payment_method']}")
+                    
+                    execution_success = True
+                    final_status = 'APPROVED_EXECUTED'
+        except Exception as e:
+            logger.error(f"Wallet load {request_id} execution failed: {e}")
+            # Mark as APPROVED_FAILED
+            await execute("""
+                UPDATE wallet_load_requests 
+                SET status = 'APPROVED_FAILED',
+                    reviewed_by = $1, 
+                    reviewed_at = $2,
+                    rejection_reason = $3,
+                    updated_at = NOW()
+                WHERE request_id = $4
+            """, actor_id, now, f"Execution failed: {str(e)}", request_id)
+            
+            return ApprovalResult(False, f"Wallet load approved but execution failed: {str(e)}", {
+                "request_id": request_id,
+                "status": "APPROVED_FAILED",
+                "error": str(e)
+            })
         
         await emit_event(
             event_type=EventType.WALLET_LOAD_APPROVED,
-            title="Wallet Load Approved",
+            title="Wallet Load Approved & Executed",
             message=f"₱{amount:,.2f} credited to @{load_request.get('username')}",
             reference_id=request_id,
             reference_type="wallet_load",
@@ -495,16 +521,18 @@ async def approve_or_reject_wallet_load(
                 "new_balance": new_balance,
                 "approved_by": actor_id,
                 "actor_type": actor_type.value,
-                "amount_adjusted": amount_adjusted
+                "amount_adjusted": amount_adjusted,
+                "final_status": final_status
             },
             requires_action=False
         )
         
-        return ApprovalResult(True, "Wallet load approved", {
+        return ApprovalResult(True, f"Wallet load approved and executed ({final_status})", {
             "request_id": request_id,
             "amount": amount,
             "new_balance": new_balance,
-            "amount_adjusted": amount_adjusted
+            "amount_adjusted": amount_adjusted,
+            "final_status": final_status
         })
     
     else:  # reject
