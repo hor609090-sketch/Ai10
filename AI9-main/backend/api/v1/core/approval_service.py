@@ -88,8 +88,11 @@ async def approve_or_reject_order(
     if not order:
         return ApprovalResult(False, "Order not found")
     
-    # Idempotency check
-    if order['status'] not in ['pending', 'pending_review', 'initiated', 'awaiting_payment_proof']:
+    # Idempotency check - only process orders in valid pending states
+    # CANONICAL PENDING STATES: PENDING_REVIEW, initiated, awaiting_payment_proof
+    # Also accept legacy lowercase for backward compatibility during transition
+    valid_pending_states = ['PENDING_REVIEW', 'pending_review', 'pending', 'initiated', 'awaiting_payment_proof']
+    if order['status'] not in valid_pending_states:
         return ApprovalResult(False, f"Order already {order['status']}", {"already_processed": True})
     
     now = datetime.now(timezone.utc)
@@ -365,8 +368,11 @@ async def approve_or_reject_wallet_load(
     if not load_request:
         return ApprovalResult(False, "Request not found")
     
-    # Idempotency check
-    if load_request['status'] != 'pending':
+    # Idempotency check - only process requests in valid pending states
+    # CANONICAL PENDING STATE: PENDING_REVIEW
+    # Also accept legacy 'pending' for backward compatibility
+    valid_pending_states = ['PENDING_REVIEW', 'pending_review', 'pending']
+    if load_request['status'] not in valid_pending_states:
         return ApprovalResult(False, f"Request already {load_request['status']}", {"already_processed": True})
     
     now = datetime.now(timezone.utc)
