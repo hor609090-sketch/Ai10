@@ -133,7 +133,29 @@ async def execute_game_load(order: Dict, user: Dict, conn) -> Dict:
         current_user = await conn.fetchrow("SELECT real_balance FROM users WHERE user_id = $1", user['user_id'])
         wallet_balance_before = float(current_user['real_balance'] or 0)
         
-        # Deduct from wallet (immediate execution)
+        # ==================== GAME API INTEGRATION (CHECK FIRST) ====================
+        # CRITICAL: Check API availability BEFORE touching wallet
+        # MONEY SAFETY: Never deduct wallet unless we can execute
+        
+        # TODO: Replace with real game load API call
+        # Example:
+        # game_api_response = await call_game_api(game_id, amount, user_id)
+        # if not game_api_response.success:
+        #     return {"success": False, "error": game_api_response.error, "error_code": "GAME_LOAD_API_UNAVAILABLE"}
+        
+        # For now, check if we have a game API endpoint configured
+        game_api_available = False  # Set to True when real integration exists
+        
+        if not game_api_available:
+            # API unavailable - MUST fail, NO wallet change
+            return {
+                "success": False,
+                "error": "Game load API is not available. Real integration required.",
+                "error_code": "GAME_LOAD_API_UNAVAILABLE",
+                "game_name": game_name
+            }
+        
+        # ONLY deduct wallet AFTER API check passes
         new_balance = wallet_balance_before - amount
         
         if new_balance < 0:
@@ -148,28 +170,6 @@ async def execute_game_load(order: Dict, user: Dict, conn) -> Dict:
             UPDATE users SET real_balance = $1, updated_at = NOW()
             WHERE user_id = $2
         """, new_balance, user['user_id'])
-        
-        # ==================== GAME API INTEGRATION ====================
-        # CRITICAL: This is where real game load API would be called
-        # If game API is unavailable, this section MUST return failure
-        
-        # TODO: Replace with real game load API call
-        # Example:
-        # game_api_response = await call_game_api(game_id, amount, user_id)
-        # if not game_api_response.success:
-        #     return {"success": False, "error": game_api_response.error, "error_code": "GAME_LOAD_API_UNAVAILABLE"}
-        
-        # For now, check if we have a game API endpoint configured
-        game_api_available = False  # Set to True when real integration exists
-        
-        if not game_api_available:
-            # API unavailable - MUST fail, NO fake credentials
-            return {
-                "success": False,
-                "error": "Game load API is not available. Real integration required.",
-                "error_code": "GAME_LOAD_API_UNAVAILABLE",
-                "game_name": game_name
-            }
         
         # If we reach here, game API call was successful
         # Generate REAL game credentials from API response
