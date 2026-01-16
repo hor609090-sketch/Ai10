@@ -416,9 +416,43 @@ async def create_order_bot(
     data: BotOrderCreate,
     authorization: str = Header(..., alias="Authorization")
 ):
-    """Create order for bot with conversation metadata"""
+    """Create order for bot with conversation metadata and IDEMPOTENCY"""
     await require_bot_auth(authorization)
     await check_rate_limiting(request)
+    
+    # ==================== IDEMPOTENCY CHECK (MANDATORY for Chatwoot) ====================
+    # Generate deterministic idempotency key from conversation_id
+    idempotency_key = None
+    if data.conversation_id:
+        # Deterministic: user_id + conversation_id + game + amount
+        key_string = f"{data.user_id}:{data.conversation_id}:{data.game_name}:{data.amount}"
+        idempotency_key = hashlib.sha256(key_string.encode()).hexdigest()[:64]
+        
+        # Check if order already exists with this idempotency key
+        existing = await fetch_one(
+            "SELECT * FROM orders WHERE idempotency_key = $1",
+            idempotency_key
+        )
+        
+        if existing:
+            logger.info(f"Duplicate Chatwoot order detected (idempotency_key={idempotency_key}), returning existing order")
+            return {
+                "success": True,
+                "message": "Order already exists (idempotent)",
+                "order": {
+                    "order_id": existing['order_id'],
+                    "user_id": existing['user_id'],
+                    "username": existing['username'],
+                    "game_name": existing['game_name'],
+                    "amount": existing['amount'],
+                    "bonus_amount": existing['bonus_amount'],
+                    "total_amount": existing['total_amount'],
+                    "status": existing['status'],
+                    "conversation_id": data.conversation_id,
+                    "created_at": existing['created_at'].isoformat() if existing.get('created_at') else None
+                },
+                "duplicate": True
+            }
     
     # Validate first
     validation = await validate_order_bot(request, data, authorization)
@@ -443,14 +477,14 @@ async def create_order_bot(
         INSERT INTO orders (
             order_id, user_id, username, order_type, game_name, game_display_name,
             amount, bonus_amount, total_amount, referral_code,
-            status, metadata, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            status, idempotency_key, metadata, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
     ''',
         order_id, data.user_id, user['username'], 'deposit',
         data.game_name.lower(), validation['game']['display_name'],
         data.amount, validation['bonus_calculation']['total_bonus'], validation['total_amount'],
         data.referral_code.upper() if data.referral_code else None,
-        'initiated', json.dumps(metadata), now
+        'initiated', idempotency_key, json.dumps(metadata), now
     )
     
     # Log audit
