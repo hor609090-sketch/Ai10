@@ -443,7 +443,15 @@ class NotificationRouter:
         payload: NotificationPayload,
         show_approval_buttons: bool = False
     ) -> Dict[str, Any]:
-        """Send notification to a specific Telegram bot"""
+        """
+        Send notification to a specific Telegram bot.
+        
+        PROOF IMAGE HANDLING:
+        - Checks extra_data for 'proof_image' (base64) or 'image_url' (URL)
+        - Base64 images are decoded and sent via sendDocument as file upload
+        - URL images are sent via sendPhoto
+        - Images are NEVER stored in database
+        """
         try:
             bot_token = bot['bot_token']
             chat_id = bot['chat_id']
@@ -497,21 +505,76 @@ class NotificationRouter:
                     result = response.json()
                     message_id = result.get('result', {}).get('message_id')
                     
-                    # If there's an image, send it as follow-up
-                    if payload.image_url:
+                    # Handle proof images - check both extra_data and payload.image_url
+                    proof_image_sent = False
+                    
+                    # Check for base64 proof_image in extra_data (SITE UPLOADS)
+                    extra_data = payload.extra_data or {}
+                    base64_proof = extra_data.get('proof_image')
+                    
+                    if base64_proof:
+                        try:
+                            # Remove data URL prefix if present
+                            if ',' in base64_proof:
+                                base64_proof = base64_proof.split(',', 1)[1]
+                            
+                            # Decode base64 to bytes
+                            image_bytes = base64.b64decode(base64_proof)
+                            
+                            # Determine file extension from image_type if available
+                            image_type = extra_data.get('image_type', 'image/jpeg')
+                            ext = 'jpg'
+                            if 'png' in image_type:
+                                ext = 'png'
+                            elif 'gif' in image_type:
+                                ext = 'gif'
+                            
+                            # Create filename
+                            ref_short = payload.reference_id[:8] if payload.reference_id else 'proof'
+                            filename = f"payment_proof_{ref_short}.{ext}"
+                            
+                            # Send as document (file upload) - more reliable for large images
+                            files = {
+                                'document': (filename, io.BytesIO(image_bytes), image_type)
+                            }
+                            form_data = {
+                                'chat_id': chat_id,
+                                'caption': f"📎 Payment Proof for {payload.reference_type or 'request'} {ref_short}..."
+                            }
+                            
+                            img_response = await client.post(
+                                f"https://api.telegram.org/bot{bot_token}/sendDocument",
+                                data=form_data,
+                                files=files
+                            )
+                            
+                            if img_response.status_code == 200:
+                                proof_image_sent = True
+                                logger.info(f"Base64 proof image sent to bot {bot['name']} for {payload.reference_id}")
+                            else:
+                                logger.warning(f"Failed to send base64 proof image: {img_response.text}")
+                                
+                        except Exception as img_err:
+                            logger.warning(f"Failed to decode/send base64 proof image to bot {bot['name']}: {img_err}")
+                    
+                    # Check for image_url in extra_data (CHATWOOT/WEBHOOK UPLOADS)
+                    image_url = extra_data.get('image_url') or payload.image_url
+                    if image_url and not proof_image_sent:
                         try:
                             await client.post(
                                 f"https://api.telegram.org/bot{bot_token}/sendPhoto",
                                 json={
                                     "chat_id": chat_id,
-                                    "photo": payload.image_url,
-                                    "caption": f"Proof for {payload.reference_type or 'request'} {payload.reference_id[:8] if payload.reference_id else 'N/A'}..."
+                                    "photo": image_url,
+                                    "caption": f"📎 Proof for {payload.reference_type or 'request'} {payload.reference_id[:8] if payload.reference_id else 'N/A'}..."
                                 }
                             )
+                            proof_image_sent = True
+                            logger.info(f"URL proof image sent to bot {bot['name']} for {payload.reference_id}")
                         except Exception as img_err:
-                            logger.warning(f"Failed to send image to bot {bot['name']}: {img_err}")
+                            logger.warning(f"Failed to send URL image to bot {bot['name']}: {img_err}")
                     
-                    return {"success": True, "message_id": message_id}
+                    return {"success": True, "message_id": message_id, "proof_image_sent": proof_image_sent}
                 else:
                     return {"success": False, "error": response.text}
                     
