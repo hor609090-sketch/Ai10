@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { API_BASE } from '../../utils/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -16,8 +17,6 @@ import {
   RefreshCw,
   Eye
 } from 'lucide-react';
-
-const API = process.env.REACT_APP_BACKEND_URL;
 
 /**
  * APPROVALS PAGE
