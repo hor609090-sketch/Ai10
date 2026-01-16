@@ -324,6 +324,13 @@ async def init_api_v1_db():
                 rejection_reason TEXT,
                 approved_by VARCHAR(36),
                 approved_at TIMESTAMPTZ,
+                -- Amount adjustment tracking
+                amount_adjusted BOOLEAN DEFAULT FALSE,
+                adjusted_by VARCHAR(100),
+                adjusted_at TIMESTAMPTZ,
+                -- Execution tracking (IMMEDIATE on approval)
+                executed_at TIMESTAMPTZ,
+                execution_result JSONB,
                 idempotency_key VARCHAR(100) UNIQUE,
                 metadata JSONB DEFAULT '{}',
                 created_at TIMESTAMPTZ DEFAULT NOW(),
